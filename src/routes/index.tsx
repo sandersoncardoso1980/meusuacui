@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
           "Início do portal Entre Rios IA: promoções, últimos anúncios, comunicados da Prefeitura e próximos eventos em Entre Rios de Minas.",
       },
       { property: "og:title", content: "Entre Rios IA — Portal da cidade" },
-      { property: "og:description", content: "Comércio local, serviços e novidades da nossa cidade." },
+      { property: "og:description", content: "Início do portal Entre Rios IA: promoções, últimos anúncios, comunicados da Prefeitura e próximos eventos em Entre Rios de Minas." },
     ],
   }),
   component: Index,

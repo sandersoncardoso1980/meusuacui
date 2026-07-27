@@ -79,20 +79,24 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Entre Rios IA — Portal da cidade de Entre Rios de Minas" },
+      { title: "Entre Rios IA — Portal da cidade" },
       {
         name: "description",
         content:
-          "Portal municipal de Entre Rios de Minas (MG): anúncios, empresas, serviços, notícias, eventos e comunicados oficiais da Prefeitura em um só lugar.",
+          "Início do portal Entre Rios IA: promoções, últimos anúncios, comunicados da Prefeitura e próximos eventos em Entre Rios de Minas.",
       },
       { property: "og:title", content: "Entre Rios IA — Portal da cidade" },
       {
         property: "og:description",
         content:
-          "Conecte-se com o melhor da nossa terra: comércio local, serviços públicos e as novidades de Entre Rios de Minas.",
+          "Início do portal Entre Rios IA: promoções, últimos anúncios, comunicados da Prefeitura e próximos eventos em Entre Rios de Minas.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Entre Rios IA — Portal da cidade" },
+      { name: "twitter:description", content: "Início do portal Entre Rios IA: promoções, últimos anúncios, comunicados da Prefeitura e próximos eventos em Entre Rios de Minas." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6b3da38d-c099-4f98-85d4-8ad6bae6b2b0/id-preview-ab59d7dd--c5280482-7bb2-4374-86c8-090690630cbb.lovable.app-1785157195969.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/6b3da38d-c099-4f98-85d4-8ad6bae6b2b0/id-preview-ab59d7dd--c5280482-7bb2-4374-86c8-090690630cbb.lovable.app-1785157195969.png" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
