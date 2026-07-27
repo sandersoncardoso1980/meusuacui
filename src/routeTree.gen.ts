@@ -9,8 +9,74 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TurismoRouteImport } from './routes/turismo'
+import { Route as ServicosRouteImport } from './routes/servicos'
+import { Route as PrefeituraRouteImport } from './routes/prefeitura'
+import { Route as NoticiasRouteImport } from './routes/noticias'
+import { Route as IaCidadeRouteImport } from './routes/ia-cidade'
+import { Route as FaleConoscoRouteImport } from './routes/fale-conosco'
+import { Route as EventosRouteImport } from './routes/eventos'
+import { Route as EmpresasRouteImport } from './routes/empresas'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AnunciosRouteImport } from './routes/anuncios'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 
+const TurismoRoute = TurismoRouteImport.update({
+  id: '/turismo',
+  path: '/turismo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ServicosRoute = ServicosRouteImport.update({
+  id: '/servicos',
+  path: '/servicos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrefeituraRoute = PrefeituraRouteImport.update({
+  id: '/prefeitura',
+  path: '/prefeitura',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const NoticiasRoute = NoticiasRouteImport.update({
+  id: '/noticias',
+  path: '/noticias',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IaCidadeRoute = IaCidadeRouteImport.update({
+  id: '/ia-cidade',
+  path: '/ia-cidade',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaleConoscoRoute = FaleConoscoRouteImport.update({
+  id: '/fale-conosco',
+  path: '/fale-conosco',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EventosRoute = EventosRouteImport.update({
+  id: '/eventos',
+  path: '/eventos',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const EmpresasRoute = EmpresasRouteImport.update({
+  id: '/empresas',
+  path: '/empresas',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AnunciosRoute = AnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -19,28 +85,186 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/anuncios': typeof AnunciosRoute
+  '/auth': typeof AuthRoute
+  '/empresas': typeof EmpresasRoute
+  '/eventos': typeof EventosRoute
+  '/fale-conosco': typeof FaleConoscoRoute
+  '/ia-cidade': typeof IaCidadeRoute
+  '/noticias': typeof NoticiasRoute
+  '/prefeitura': typeof PrefeituraRoute
+  '/servicos': typeof ServicosRoute
+  '/turismo': typeof TurismoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/anuncios': typeof AnunciosRoute
+  '/auth': typeof AuthRoute
+  '/empresas': typeof EmpresasRoute
+  '/eventos': typeof EventosRoute
+  '/fale-conosco': typeof FaleConoscoRoute
+  '/ia-cidade': typeof IaCidadeRoute
+  '/noticias': typeof NoticiasRoute
+  '/prefeitura': typeof PrefeituraRoute
+  '/servicos': typeof ServicosRoute
+  '/turismo': typeof TurismoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
+  '/anuncios': typeof AnunciosRoute
+  '/auth': typeof AuthRoute
+  '/empresas': typeof EmpresasRoute
+  '/eventos': typeof EventosRoute
+  '/fale-conosco': typeof FaleConoscoRoute
+  '/ia-cidade': typeof IaCidadeRoute
+  '/noticias': typeof NoticiasRoute
+  '/prefeitura': typeof PrefeituraRoute
+  '/servicos': typeof ServicosRoute
+  '/turismo': typeof TurismoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/anuncios'
+    | '/auth'
+    | '/empresas'
+    | '/eventos'
+    | '/fale-conosco'
+    | '/ia-cidade'
+    | '/noticias'
+    | '/prefeitura'
+    | '/servicos'
+    | '/turismo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/admin'
+    | '/anuncios'
+    | '/auth'
+    | '/empresas'
+    | '/eventos'
+    | '/fale-conosco'
+    | '/ia-cidade'
+    | '/noticias'
+    | '/prefeitura'
+    | '/servicos'
+    | '/turismo'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/anuncios'
+    | '/auth'
+    | '/empresas'
+    | '/eventos'
+    | '/fale-conosco'
+    | '/ia-cidade'
+    | '/noticias'
+    | '/prefeitura'
+    | '/servicos'
+    | '/turismo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
+  AnunciosRoute: typeof AnunciosRoute
+  AuthRoute: typeof AuthRoute
+  EmpresasRoute: typeof EmpresasRoute
+  EventosRoute: typeof EventosRoute
+  FaleConoscoRoute: typeof FaleConoscoRoute
+  IaCidadeRoute: typeof IaCidadeRoute
+  NoticiasRoute: typeof NoticiasRoute
+  PrefeituraRoute: typeof PrefeituraRoute
+  ServicosRoute: typeof ServicosRoute
+  TurismoRoute: typeof TurismoRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/turismo': {
+      id: '/turismo'
+      path: '/turismo'
+      fullPath: '/turismo'
+      preLoaderRoute: typeof TurismoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/servicos': {
+      id: '/servicos'
+      path: '/servicos'
+      fullPath: '/servicos'
+      preLoaderRoute: typeof ServicosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prefeitura': {
+      id: '/prefeitura'
+      path: '/prefeitura'
+      fullPath: '/prefeitura'
+      preLoaderRoute: typeof PrefeituraRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/noticias': {
+      id: '/noticias'
+      path: '/noticias'
+      fullPath: '/noticias'
+      preLoaderRoute: typeof NoticiasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/ia-cidade': {
+      id: '/ia-cidade'
+      path: '/ia-cidade'
+      fullPath: '/ia-cidade'
+      preLoaderRoute: typeof IaCidadeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fale-conosco': {
+      id: '/fale-conosco'
+      path: '/fale-conosco'
+      fullPath: '/fale-conosco'
+      preLoaderRoute: typeof FaleConoscoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/eventos': {
+      id: '/eventos'
+      path: '/eventos'
+      fullPath: '/eventos'
+      preLoaderRoute: typeof EventosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/empresas': {
+      id: '/empresas'
+      path: '/empresas'
+      fullPath: '/empresas'
+      preLoaderRoute: typeof EmpresasRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/anuncios': {
+      id: '/anuncios'
+      path: '/anuncios'
+      fullPath: '/anuncios'
+      preLoaderRoute: typeof AnunciosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -53,17 +277,18 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
+  AnunciosRoute: AnunciosRoute,
+  AuthRoute: AuthRoute,
+  EmpresasRoute: EmpresasRoute,
+  EventosRoute: EventosRoute,
+  FaleConoscoRoute: FaleConoscoRoute,
+  IaCidadeRoute: IaCidadeRoute,
+  NoticiasRoute: NoticiasRoute,
+  PrefeituraRoute: PrefeituraRoute,
+  ServicosRoute: ServicosRoute,
+  TurismoRoute: TurismoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
