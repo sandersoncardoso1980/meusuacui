@@ -228,8 +228,8 @@ function EditForm({ cfg, initial, onClose, onSaved }: { cfg: TableCfg; initial: 
     });
 
     const { error } = isNew
-      ? await supabase.from(cfg.table).insert(payload)
-      : await supabase.from(cfg.table).update(payload).eq("id", initial.id);
+      ? await (supabase.from(cfg.table) as any).insert(payload)
+      : await (supabase.from(cfg.table) as any).update(payload).eq("id", initial.id);
 
     setSaving(false);
     if (error) { toast.error(error.message); return; }
