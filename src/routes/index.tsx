@@ -246,8 +246,8 @@ function Index() {
               className="group bg-white rounded-xl ring-1 ring-slate-200 overflow-hidden hover:shadow-md transition-all"
             >
               <div className="aspect-[4/3] bg-slate-100 flex items-center justify-center text-4xl">
-                {a.imagem_url ? (
-                  <img src={a.imagem_url} alt={a.titulo} className="w-full h-full object-cover" />
+                {a.imagens_urls && a.imagens_urls[0] ? (
+                  <img src={a.imagens_urls[0]} alt={a.titulo} className="w-full h-full object-cover" />
                 ) : (
                   <span>📦</span>
                 )}
