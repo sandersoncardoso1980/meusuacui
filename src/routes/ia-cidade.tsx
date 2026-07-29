@@ -1,15 +1,15 @@
+// src/routes/ia-cidade.tsx
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { AppLayout } from "@/components/AppLayout";
-import { supabase } from "@/integrations/supabase/client";
-import { Send, Sparkles } from "lucide-react";
+import { Send, Sparkles, Loader2, Bot, User } from "lucide-react";
 
 export const Route = createFileRoute("/ia-cidade")({
   head: () => ({
     meta: [
-      { title: "IA da Cidade — Entre Rios IA" },
-      { name: "description", content: "Chat inteligente que responde suas perguntas sobre Entre Rios de Minas." },
-      { property: "og:title", content: "IA da Cidade — Entre Rios IA" },
+      { title: "IA da Cidade — São Brás do Suaçuí" },
+      { name: "description", content: "Chat inteligente que responde suas perguntas sobre São Brás do Suaçuí." },
+      { property: "og:title", content: "IA da Cidade — São Brás do Suaçuí" },
       { property: "og:description", content: "Pergunte tudo sobre a cidade." },
     ],
   }),
@@ -23,118 +23,194 @@ const SUGESTOES = [
   "Quais eventos acontecem essa semana?",
   "Restaurantes com promoção hoje?",
   "Como emitir o IPTU?",
+  "Quais são os pontos turísticos da cidade?",
+  "O que tem para fazer no fim de semana?",
 ];
-
-async function respond(q: string): Promise<string> {
-  const query = q.toLowerCase();
-
-  if (/(evento|agenda|programação|programacao)/.test(query)) {
-    const { data } = await supabase
-      .from("eventos")
-      .select("titulo, data_hora_inicio, local")
-      .gte("data_hora_inicio", new Date().toISOString())
-      .order("data_hora_inicio")
-      .limit(5);
-    if (!data?.length) return "Não encontrei eventos próximos na agenda.";
-    return "Aqui estão os próximos eventos:\n\n" + data.map((e) => `• **${e.titulo}** — ${new Date(e.data_hora_inicio).toLocaleDateString("pt-BR")} em ${e.local}`).join("\n");
-  }
-
-  if (/(promo|desconto|oferta)/.test(query)) {
-    const { data } = await supabase.from("empresas").select("nome, descricao_promocao").eq("promocao_ativa", true);
-    if (!data?.length) return "Nenhuma promoção ativa no momento.";
-    return "Promoções ativas na cidade:\n\n" + data.map((e) => `• **${e.nome}**: ${e.descricao_promocao}`).join("\n");
-  }
-
-  if (/(farmácia|farmacia|saúde|saude|hospital|posto)/.test(query)) {
-    const { data } = await supabase.from("empresas").select("nome, endereco, horario_funcionamento, contato").eq("categoria", "Saúde");
-    if (!data?.length) return "Sem estabelecimentos de saúde cadastrados.";
-    return data.map((e) => `**${e.nome}**\n${e.endereco}\n${e.horario_funcionamento}\n${e.contato}`).join("\n\n");
-  }
-
-  if (/(anúncio|anuncio|venda|comprar|vender)/.test(query)) {
-    const { data } = await supabase.from("anuncios").select("titulo, preco, categoria").order("created_at", { ascending: false }).limit(5);
-    if (!data?.length) return "Nenhum anúncio disponível.";
-    return "Últimos anúncios:\n\n" + data.map((a) => `• **${a.titulo}** (${a.categoria}) — ${a.preco ? "R$ " + a.preco : "Sob consulta"}`).join("\n");
-  }
-
-  if (/(comunicado|prefeitura|iptu|imposto)/.test(query)) {
-    const { data } = await supabase.from("comunicados_prefeitura").select("titulo, conteudo").order("data_publicacao", { ascending: false }).limit(3);
-    if (!data?.length) return "Sem comunicados recentes.";
-    return "Comunicados recentes da Prefeitura:\n\n" + data.map((c) => `• **${c.titulo}**\n${c.conteudo}`).join("\n\n");
-  }
-
-  if (/(notícia|noticia)/.test(query)) {
-    const { data } = await supabase.from("noticias").select("titulo, resumo").order("data_publicacao", { ascending: false }).limit(3);
-    if (!data?.length) return "Sem notícias no momento.";
-    return "Últimas notícias:\n\n" + data.map((n) => `• **${n.titulo}**\n${n.resumo}`).join("\n\n");
-  }
-
-  return "Posso te ajudar com **eventos**, **promoções**, **empresas locais**, **anúncios**, **comunicados da Prefeitura** e **notícias**. O que você gostaria de saber?";
-}
 
 function IACidade() {
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", text: "Olá! Sou a IA da Cidade. Pergunte sobre eventos, comércio local, serviços públicos e mais." },
+    { 
+      role: "assistant", 
+      text: "Olá! Sou a IA da Cidade de São Brás do Suaçuí. Estou aqui para ajudar você com informações sobre nossa cidade!\n\nPosso falar sobre:\n* Eventos e agenda\n* Comércio e serviços\n* Comunicados oficiais\n* Notícias locais\n* Serviços públicos\n\nO que você gostaria de saber?" 
+    },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  async function send(text: string) {
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [msgs]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  async function sendMessage(text: string) {
     if (!text.trim() || loading) return;
-    setMsgs((m) => [...m, { role: "user", text }]);
+
+    setMsgs((prev) => [...prev, { role: "user", text: text.trim() }]);
     setInput("");
     setLoading(true);
-    const reply = await respond(text);
-    setMsgs((m) => [...m, { role: "assistant", text: reply }]);
-    setLoading(false);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: text.trim() }]
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao processar sua pergunta');
+      }
+
+      const data = await response.json();
+      
+      setMsgs((prev) => [...prev, { role: "assistant", text: data.message }]);
+    } catch (error) {
+      console.error('Erro:', error);
+      setMsgs((prev) => [...prev, { 
+        role: "assistant", 
+        text: "Desculpe, tive um problema ao processar sua pergunta. Por favor, tente novamente mais tarde ou reformule sua pergunta." 
+      }]);
+    } finally {
+      setLoading(false);
+    }
   }
+
+  // Função segura para formatar mensagens sem emojis problemáticos
+  const formatMessage = (text: string) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    
+    return lines.map((line, i) => {
+      // Títulos em negrito
+      if (line.startsWith('**') && line.endsWith('**')) {
+        return <div key={i} className="font-bold text-base mt-2">{line.slice(2, -2)}</div>;
+      }
+      
+      // Listas com marcadores
+      if (line.startsWith('•') || line.startsWith('*') || line.startsWith('-')) {
+        const content = line.replace(/^[•*\-]\s*/, '');
+        return <div key={i} className="flex items-start gap-2 ml-2">
+          <span className="text-primary">•</span>
+          <span>{content}</span>
+        </div>;
+      }
+      
+      // Parágrafo normal
+      return <div key={i} className={i > 0 ? 'mt-1' : ''}>{line}</div>;
+    });
+  };
 
   return (
     <AppLayout>
-      <header className="animate-reveal">
-        <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">— Assistente</p>
-        <h1 className="text-3xl font-extrabold tracking-tight flex items-center gap-2">
-          <Sparkles className="size-7 text-primary" /> IA da Cidade
-        </h1>
-        <p className="text-sm text-muted-foreground mt-2">Perguntas sobre Entre Rios respondidas na hora.</p>
-      </header>
+      <div className="max-w-4xl mx-auto px-4">
+        <header className="animate-reveal py-6">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-primary mb-2">— Assistente Inteligente</p>
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight flex items-center gap-3">
+            <Sparkles className="size-8 text-primary" /> 
+            <span>IA da Cidade</span>
+          </h1>
+          <p className="text-sm text-muted-foreground mt-2">
+            Assistente virtual com IA para São Brás do Suaçuí
+          </p>
+        </header>
 
-      <div className="bg-card rounded-2xl ring-1 ring-black/5 flex flex-col h-[65vh] max-h-[700px] animate-reveal">
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
-          {msgs.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm whitespace-pre-wrap ${
-                m.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
-              }`}>
-                {m.text.split("**").map((part, idx) => idx % 2 === 1 ? <strong key={idx}>{part}</strong> : part)}
+        <div className="bg-card rounded-2xl ring-1 ring-black/5 shadow-lg flex flex-col h-[65vh] max-h-[700px] animate-reveal overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
+            {msgs.map((m, i) => (
+              <div 
+                key={i} 
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-in slide-in-from-bottom-2 duration-300`}
+                style={{ animationDelay: `${i * 50}ms` }}
+              >
+                <div className={`flex items-start gap-2 max-w-[85%] ${
+                  m.role === "user" ? "flex-row-reverse" : ""
+                }`}>
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    m.role === "user" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted text-foreground"
+                  }`}>
+                    {m.role === "user" ? <User className="size-4" /> : <Bot className="size-4" />}
+                  </div>
+                  
+                  <div className={`rounded-2xl px-4 py-3 text-sm ${
+                    m.role === "user" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted text-foreground"
+                  }`}>
+                    {m.role === "assistant" ? formatMessage(m.text) : m.text}
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-          {loading && <div className="text-xs text-muted-foreground italic">Pensando...</div>}
-        </div>
+            ))}
+            
+            <div ref={messagesEndRef} />
+            
+            {loading && (
+              <div className="flex justify-start animate-in slide-in-from-bottom-2 duration-300">
+                <div className="flex items-start gap-2">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                    <Bot className="size-4" />
+                  </div>
+                  <div className="bg-muted rounded-2xl px-4 py-3 flex items-center gap-2">
+                    <Loader2 className="size-4 animate-spin" />
+                    <span className="text-sm text-muted-foreground">Pensando...</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
 
-        <div className="border-t border-border p-3">
-          {msgs.length <= 1 && (
-            <div className="flex gap-2 flex-wrap mb-3">
-              {SUGESTOES.map((s) => (
-                <button key={s} onClick={() => send(s)} className="text-xs bg-muted hover:bg-muted/70 px-3 py-1.5 rounded-full text-muted-foreground">
-                  {s}
-                </button>
-              ))}
-            </div>
-          )}
-          <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2">
-            <input
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Pergunte algo sobre a cidade..."
-              className="flex-1 px-4 py-2.5 border border-input rounded-lg bg-background text-sm"
-            />
-            <button type="submit" disabled={loading} className="bg-primary text-primary-foreground px-4 rounded-lg hover:bg-primary/90 disabled:opacity-50">
-              <Send className="size-4" />
-            </button>
-          </form>
+          <div className="border-t border-border p-4 bg-background/50 backdrop-blur-sm">
+            {msgs.length <= 1 && (
+              <div className="flex gap-2 flex-wrap mb-3">
+                {SUGESTOES.map((s) => (
+                  <button 
+                    key={s} 
+                    onClick={() => sendMessage(s)} 
+                    className="text-xs bg-muted hover:bg-primary/10 px-3 py-1.5 rounded-full text-muted-foreground hover:text-foreground transition-all duration-200 border border-transparent hover:border-primary/20"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+            
+            <form onSubmit={(e) => { e.preventDefault(); sendMessage(input); }} className="flex gap-2">
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Digite sua pergunta sobre a cidade..."
+                className="flex-1 px-4 py-2.5 border border-input rounded-lg bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+                disabled={loading}
+              />
+              <button 
+                type="submit" 
+                disabled={loading || !input.trim()} 
+                className="bg-primary text-primary-foreground px-4 rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-all duration-200 flex items-center gap-2"
+              >
+                {loading ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
+              </button>
+            </form>
+          </div>
         </div>
+        
+        <p className="text-xs text-center text-muted-foreground mt-4">
+          IA alimentada por Google Gemini • Dados atualizados de São Brás do Suaçuí
+        </p>
       </div>
     </AppLayout>
   );

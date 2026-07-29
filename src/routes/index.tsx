@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import heroCity from "@/assets/hero-city.jpg";
+import heroCity from "@/assets/hero-city2.jpg";
 import {
   Car,
   Home as HomeIcon,
@@ -21,28 +21,28 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Entre Rios IA — Portal da cidade" },
+      { title: "MEU SUAÇUÍ IA — Portal da cidade" },
       {
         name: "description",
         content:
-          "Portal da cidade de Entre Rios de Minas: pergunte à IA, veja anúncios, empresas, eventos e comunicados da Prefeitura.",
+          "Portal da cidade de São Brás do Suaçuí: pergunte à IA, veja anúncios, empresas, eventos e comunicados da Prefeitura.",
       },
-      { property: "og:title", content: "Entre Rios IA — Portal da cidade" },
-      { property: "og:description", content: "Portal da cidade de Entre Rios de Minas: pergunte à IA, veja anúncios, empresas, eventos e comunicados." },
+      { property: "og:title", content: "São Brás IA — Portal da cidade" },
+      { property: "og:description", content: "Portal da cidade de São Brás do Suaçuí: pergunte à IA, veja anúncios, empresas, eventos e comunicados." },
     ],
   }),
   component: Index,
 });
 
 const CATEGORIES = [
-  { icon: Car, label: "Carros", color: "bg-blue-50 text-blue-600" },
-  { icon: HomeIcon, label: "Imóveis", color: "bg-emerald-50 text-emerald-600" },
-  { icon: Briefcase, label: "Empregos", color: "bg-amber-50 text-amber-600" },
-  { icon: Wrench, label: "Serviços", color: "bg-violet-50 text-violet-600" },
-  { icon: ShoppingBag, label: "Comércio", color: "bg-rose-50 text-rose-600" },
-  { icon: UtensilsCrossed, label: "Restaurantes", color: "bg-orange-50 text-orange-600" },
-  { icon: HeartPulse, label: "Saúde", color: "bg-teal-50 text-teal-600" },
-  { icon: Landmark, label: "Prefeitura", color: "bg-slate-100 text-slate-700" },
+  { icon: Car, label: "Carros", color: "bg-blue-50 text-blue-600", href: "/anuncios" }, // ou /empresas dependendo de onde cobrir veículos
+  { icon: HomeIcon, label: "Imóveis", color: "bg-emerald-50 text-emerald-600", href: "/anuncios" },
+  { icon: Briefcase, label: "Empregos", color: "bg-amber-50 text-amber-600", href: "/anuncios" },
+  { icon: Wrench, label: "Serviços", color: "bg-violet-50 text-violet-600", href: "/servicos" },
+  { icon: ShoppingBag, label: "Comércio", color: "bg-rose-50 text-rose-600", href: "/empresas" },
+  { icon: UtensilsCrossed, label: "Restaurantes", color: "bg-orange-50 text-orange-600", href: "/empresas" },
+  { icon: HeartPulse, label: "Saúde", color: "bg-teal-50 text-teal-600", href: "/saude" },
+  { icon: Landmark, label: "Prefeitura", color: "bg-slate-100 text-slate-700", href: "/prefeitura" },
 ];
 
 const SUGGESTIONS = [
@@ -67,7 +67,7 @@ function fmtGreeting() {
 
 function Index() {
   const { user } = useAuth();
-  const name = user?.email?.split("@")[0] ?? "Sanderson";
+  const name = user?.email?.split("@")[0] ?? "Suaçuiense";
 
   const empresas = useQuery({
     queryKey: ["empresas-promos"],
@@ -119,14 +119,15 @@ function Index() {
             {fmtGreeting()}, <span className="text-emerald-600 capitalize">{name}</span>! <span className="inline-block">👋</span>
           </h2>
           <p className="text-slate-600 mt-2 max-w-lg">
-            Pergunte, pesquise e encontre o que precisa em <span className="font-bold text-slate-900">Entre Rios de Minas</span>.
+            Pergunte, pesquise e encontre o que precisa em <span className="font-bold text-slate-900">São Brás do Suaçuí</span>.
           </p>
         </div>
         <div className="relative w-full lg:w-[280px] h-[130px] rounded-2xl overflow-hidden ring-1 ring-slate-200 shadow-sm">
-          <img src={heroCity} alt="Entre Rios de Minas" className="w-full h-full object-cover" />
+          <div className="w-full h-full bg-cover bg-center"  style={{ backgroundImage: `url(${heroCity})` }}
+/>
           <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
           <div className="absolute bottom-3 left-3 text-white">
-            <p className="text-sm font-bold">Entre Rios de Minas</p>
+            <p className="text-sm font-bold">São Brás do Suaçuí</p>
             <p className="text-[11px] opacity-90">Nossa cidade, nosso orgulho</p>
           </div>
         </div>
@@ -163,23 +164,23 @@ function Index() {
         </div>
       </section>
 
-      {/* Categories */}
-      <section>
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
-          {CATEGORIES.map(({ icon: Icon, label, color }) => (
-            <Link
-              key={label}
-              to="/anuncios"
-              className="group bg-white rounded-xl ring-1 ring-slate-200 p-3 flex flex-col items-center gap-2 hover:shadow-md hover:-translate-y-0.5 transition-all"
-            >
-              <div className={`size-11 rounded-lg flex items-center justify-center ${color}`}>
-                <Icon className="size-5" />
-              </div>
-              <span className="text-xs font-semibold text-slate-700">{label}</span>
-            </Link>
-          ))}
+     {/* Categories */}
+<section>
+  <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
+    {CATEGORIES.map(({ icon: Icon, label, color, href }) => (
+      <Link
+        key={label}
+        to={href}
+        className="group bg-white rounded-xl ring-1 ring-slate-200 p-3 flex flex-col items-center gap-2 hover:shadow-md hover:-translate-y-0.5 transition-all"
+      >
+        <div className={`size-11 rounded-lg flex items-center justify-center ${color}`}>
+          <Icon className="size-5" />
         </div>
-      </section>
+        <span className="text-xs font-semibold text-slate-700">{label}</span>
+      </Link>
+    ))}
+  </div>
+</section>
 
       {/* Promoções */}
       <section>
@@ -257,7 +258,7 @@ function Index() {
                 <p className="text-sm font-black text-emerald-700 mt-0.5">
                   {a.preco ? `R$ ${Number(a.preco).toLocaleString("pt-BR")}` : "A combinar"}
                 </p>
-                <p className="text-[11px] text-slate-500 mt-1 truncate">Entre Rios de Minas - MG</p>
+                <p className="text-[11px] text-slate-500 mt-1 truncate">São Brás do Suaçuí - MG</p>
                 <span className="inline-block mt-2 text-[10px] font-bold text-slate-600 bg-slate-100 rounded px-2 py-0.5">
                   {a.categoria}
                 </span>

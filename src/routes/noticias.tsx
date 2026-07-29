@@ -7,8 +7,8 @@ export const Route = createFileRoute("/noticias")({
   head: () => ({
     meta: [
       { title: "Notícias — Entre Rios IA" },
-      { name: "description", content: "As últimas notícias de Entre Rios de Minas." },
-      { property: "og:title", content: "Notícias — Entre Rios IA" },
+      { name: "description", content: "As últimas notícias de São Brás do Suaçuí." },
+      { property: "og:title", content: "Notícias — MEU SUAÇUÍ IA" },
       { property: "og:description", content: "Acompanhe o que acontece na cidade." },
     ],
   }),

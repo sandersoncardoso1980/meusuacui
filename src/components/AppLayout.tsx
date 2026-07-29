@@ -22,6 +22,7 @@ import {
   ChevronDown,
   LogOut,
   LogIn,
+  HeartPulse,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -33,6 +34,7 @@ const NAV = [
   { to: "/servicos", label: "Serviços", Icon: Wrench },
   { to: "/noticias", label: "Notícias", Icon: Newspaper },
   { to: "/eventos", label: "Eventos", Icon: CalendarDays },
+  { to: "/saude", label: "Saúde", Icon: HeartPulse },
   { to: "/turismo", label: "Turismo", Icon: Camera },
   { to: "/prefeitura", label: "Prefeitura", Icon: Landmark },
   { to: "/fale-conosco", label: "Fale Conosco", Icon: Mail },
@@ -51,10 +53,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
         <div className="p-5 flex flex-col h-full overflow-y-auto">
           <Link to="/" className="mb-6 flex items-center gap-2.5">
             <div className="size-10 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-black">
-              ER
+              SB
             </div>
             <div className="leading-tight">
-              <h1 className="text-base font-black tracking-tight text-slate-900">ENTRE RIOS IA</h1>
+              <h1 className="text-base font-black tracking-tight text-slate-900">São Brás do Suaçuí</h1>
               <p className="text-[10px] text-slate-500 font-medium">A IA da nossa cidade</p>
             </div>
           </Link>
@@ -111,7 +113,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
           {/* Weather card */}
           <div className="bg-white ring-1 ring-slate-200 rounded-xl p-4 mb-4">
-            <p className="text-xs font-bold text-slate-900 mb-2">Entre Rios de Minas</p>
+            <p className="text-xs font-bold text-slate-900 mb-2">São Brás do Suaçuí</p>
             <div className="flex items-center gap-3">
               <Sun className="size-8 text-amber-500" />
               <div>
@@ -152,7 +154,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center justify-between px-4 md:px-8 py-4">
             <button className="flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-slate-900">
               <MapPin className="size-4 text-emerald-600" />
-              Entre Rios de Minas - MG
+              São Brás do Suaçuí - MG
               <ChevronDown className="size-4 text-slate-400" />
             </button>
             <div className="flex items-center gap-4">

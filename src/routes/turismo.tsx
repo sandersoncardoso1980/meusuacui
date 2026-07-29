@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { AppLayout } from "@/components/AppLayout";
-import heroCity from "@/assets/hero-city.jpg";
+import heroCity from "@/assets/hero-city3.png";
 
 export const Route = createFileRoute("/turismo")({
   head: () => ({
@@ -25,18 +25,18 @@ function Turismo() {
   return (
     <AppLayout>
       <div className="relative overflow-hidden rounded-2xl aspect-[21/9] animate-reveal">
-        <img src={heroCity} alt="Vista de Entre Rios de Minas" width={1600} height={600} className="absolute inset-0 w-full h-full object-cover" />
+        <img src={heroCity} alt="Vista de São Brás do Suaçuí" width={1600} height={600} className="absolute inset-0 w-full h-full object-cover object-center" />
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent flex items-end p-6 md:p-12">
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/80 mb-2">— Visite</p>
-            <h1 className="text-3xl md:text-5xl font-extrabold text-white">Turismo em Entre Rios</h1>
+            <h1 className="text-3xl md:text-5xl font-extrabold text-white">Turismo em São Brás do Suaçuí</h1>
           </div>
         </div>
       </div>
 
       <section className="max-w-3xl animate-reveal">
         <p className="text-lg text-muted-foreground leading-relaxed">
-          Entre Rios de Minas é uma joia da região central de Minas Gerais. Cercada por serras,
+          São Brás do Suaçuí é uma joia da região central de Minas Gerais. Cercada por serras,
           rios e casarões coloniais, oferece uma combinação única de história, natureza e a
           hospitalidade tipicamente mineira.
         </p>
