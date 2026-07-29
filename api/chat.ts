@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@supabase/supabase-js';
 
 // Interfaces de tipagem
@@ -90,9 +89,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const geminiApiKey = process.env.GROK_API_KEY;
-  if (!geminiApiKey) {
-    return res.status(500).json({ error: 'A chave GEMINI_API_KEY não foi configurada no painel da Vercel.' });
+  // Busca a chave do Groq/Grok configurada no painel da Vercel
+  const apiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY;
+
+  if (!apiKey) {
+    return res.status(500).json({ error: 'A chave GROQ_API_KEY ou GROK_API_KEY não foi encontrada nas variáveis da Vercel.' });
   }
 
   try {
@@ -108,10 +109,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const dadosContexto = await searchSupabase();
 
     // Prepara o Prompt para São Brás do Suaçuí
-    const contexto = `
+    const promptSistema = `
 Você é o assistente virtual do projeto "Meu Suaçuí", especializado na cidade de São Brás do Suaçuí, Minas Gerais.
 
-Aqui estão os dados atualizados da cidade:
+Aqui estão os dados atualizados da cidade para embasar suas respostas:
 
 EVENTOS:
 ${dadosContexto.eventos.map(e => `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}`).join('\n') || 'Nenhum evento cadastrado'}
@@ -120,7 +121,7 @@ EMPRESAS E SERVIÇOS:
 ${dadosContexto.empresas.map(e => `• ${e.nome} - ${e.categoria} - ${e.endereco || 'Endereço não informado'}`).join('\n') || 'Nenhuma empresa cadastrada'}
 
 ANÚNCIOS:
-${dadosContexto.anuncios.map(a => `• ${a.titulo} - ${a.categoria} - ${a.preco ? 'R$ ' + a.preco : 'Sob consulta'}`).join('\n') || 'Nenum anúncio disponível'}
+${dadosContexto.anuncios.map(a => `• ${a.titulo} - ${a.categoria} - ${a.preco ? 'R$ ' + a.preco : 'Sob consulta'}`).join('\n') || 'Nenhum anúncio disponível'}
 
 COMUNICADOS DA PREFEITURA:
 ${dadosContexto.comunicados.map(c => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente'}
@@ -128,29 +129,40 @@ ${dadosContexto.comunicados.map(c => `• ${c.titulo}: ${c.conteudo}`).join('\n'
 NOTÍCIAS:
 ${dadosContexto.noticias.map(n => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
-Pergunta do usuário: ${userMessage}
-
 Responda de forma cortês, objetiva e útil sobre São Brás do Suaçuí com base nos dados fornecidos.
     `;
 
-    // Chamada oficial da SDK do Gemini
-    const genAI = new GoogleGenerativeAI(geminiApiKey);
-    const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 500,
+    // Requisita a API do Groq usando Llama 3 / Mixtral (Extremamente rápido)
+    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        model: 'llama-3.3-70b-versatile',
+        messages: [
+          { role: 'system', content: promptSistema },
+          { role: 'user', content: userMessage }
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      }),
     });
 
-    const result = await model.generateContent(contexto);
-    const response = await result.response;
-    const text = response.text();
+    const data = await groqResponse.json();
 
-    return res.status(200).json({ message: text });
+    if (!groqResponse.ok) {
+      console.error('Erro na API do Groq:', data);
+      return res.status(groqResponse.status).json({ error: data.error?.message || 'Erro na API de IA' });
+    }
+
+    const replyText = data.choices[0]?.message?.content || 'Não foi possível gerar uma resposta.';
+
+    return res.status(200).json({ message: replyText });
 
   } catch (error: any) {
     console.error('Erro na Vercel Function:', error);
-    return res.status(500).json({ error: error.message || 'Erro interno ao processar resposta do Gemini' });
+    return res.status(500).json({ error: error.message || 'Erro interno ao processar requisição' });
   }
 }
