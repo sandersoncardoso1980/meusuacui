@@ -85,7 +85,7 @@ function createAiClient(env: any): OpenAI | null {
 
 const conhecimento = {
   farmacia: [
-    "Farmácia São Brás - Rua Principal, 123 - Funcionamento: 08:00 às 22:00",
+    "Farmácia São Brás - Rua Principal, 123 - Funcionamento: 08:00 às 22:00 - Plantão todos os dias.",
     "Farmácia Central - Av. Minas Gerais, 456 - Funcionamento: 24 horas",
     "Farmácia Popular - Rua da Matriz, 789 - Funcionamento: 07:00 às 21:00"
   ],
