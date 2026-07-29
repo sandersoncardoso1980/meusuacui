@@ -1,5 +1,4 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createClient } from '@supabase/supabase-js';
 
 // Interfaces de tipagem
 interface Evento {
@@ -38,13 +37,11 @@ interface DadosContexto {
   noticias: Noticia[];
 }
 
-// Inicializa Supabase
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Busca os dados no banco de dados (import dinâmico para evitar crash no carregamento do módulo)
+async function searchSupabase(supabaseUrl: string, supabaseAnonKey: string): Promise<DadosContexto> {
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Busca os dados no banco de dados
-async function searchSupabase(): Promise<DadosContexto> {
   const [eventos, empresas, anuncios, comunicados, noticias] = await Promise.all([
     supabase
       .from('eventos')
@@ -96,6 +93,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'A chave GROQ_API_KEY ou GROK_API_KEY não foi encontrada nas variáveis da Vercel.' });
   }
 
+  // Valida variáveis do Supabase ANTES de tentar criar o cliente
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return res.status(500).json({
+      error: 'As variáveis SUPABASE_URL ou SUPABASE_ANON_KEY não estão configuradas no Vercel. Verifique em Settings > Environment Variables.',
+    });
+  }
+
   try {
     const { messages } = req.body;
 
@@ -105,8 +112,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const userMessage = messages[messages.length - 1].content;
 
-    // Busca o contexto atualizado no Supabase
-    const dadosContexto = await searchSupabase();
+    // Busca o contexto atualizado no Supabase (com credenciais passadas como parâmetro)
+    const dadosContexto = await searchSupabase(supabaseUrl, supabaseAnonKey);
 
     // Prepara o Prompt para São Brás do Suaçuí
     const promptSistema = `
