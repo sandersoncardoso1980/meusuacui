@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Método não permitido' });
   }
 
-  const geminiApiKey = process.env.GEMINI_API_KEY;
+  const geminiApiKey = process.env.GROK_API_KEY;
   if (!geminiApiKey) {
     return res.status(500).json({ error: 'A chave GEMINI_API_KEY não foi configurada no painel da Vercel.' });
   }
