@@ -206,11 +206,13 @@ async function handleChat(request: Request, env: any) {
     }).join('\n') || 'Nenhuma empresa cadastrada.';
 
     // 👇 Correção: Seção de Anúncios adicionada e formatada
-    const textoAnuncios = dados?.anuncios.map((a: any) => {
-      const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
-      const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
-      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${desc}`;
-    }).join('\n') || 'Nenhum anúncio recente no momento.';
+  const textoAnuncios = dados?.anuncios.map((a: any) => {
+  const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
+  const vendedor = a.nome_vendedor ? ` | Vendedor: ${a.nome_vendedor}` : '';
+  const contato = a.telefone_vendedor ? ` | Contato/Tel: ${a.telefone_vendedor}` : '';
+  const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
+  return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${vendedor}${contato}${desc}`;
+}).join('\n') || 'Nenhum anúncio recente no momento.';
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
