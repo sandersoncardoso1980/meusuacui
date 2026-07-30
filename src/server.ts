@@ -95,15 +95,6 @@ function getSupabaseClient(env: any) {
     }
   });
 }
-}
-
-// ============================================
-// BUSCA DINÂMICA NO SUPABASE (CORRIGIDA)
-// ============================================
-
-// ============================================
-// BUSCA DINÂMICA NO SUPABASE (USANDO O CLIENTE OFICIAL)
-// ============================================
 
 // ============================================
 // BUSCA DINÂMICA NO SUPABASE (BLINDADA E SEGURA)
@@ -117,7 +108,6 @@ async function buscarInformacoesSupabase(env: any) {
   }
 
   try {
-    // Executa as buscas de forma isolada e nomeada
     const eventosPromise = supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10);
     const empresasPromise = supabaseClient.from('empresas').select('*').limit(20);
     const anunciosPromise = supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20);
@@ -170,7 +160,7 @@ async function buscarInformacoesSupabase(env: any) {
 }
 
 // ============================================
-// HANDLER DO CHAT COM IA (CORRIGIDO)
+// HANDLER DO CHAT COM IA
 // ============================================
 
 async function handleChat(request: Request, env: any) {
@@ -202,9 +192,7 @@ async function handleChat(request: Request, env: any) {
 
     const dados = await buscarInformacoesSupabase(env);
 
-    // Formatação das seções com dados do Supabase
-    // 👇 Correção robusta para tratar o array de serviços do Postgres text[]
-   const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
+    const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
       ? dados.unidadesSaude.map((u: any) => {
           let servicosStr = 'Atendimento Geral';
           
@@ -212,7 +200,6 @@ async function handleChat(request: Request, env: any) {
             servicosStr = u.servicos.join(', ');
           } else if (typeof u.servicos === 'string') {
             try {
-              // Tenta converter caso venha como string JSON (ex: '["Clínica", "Vacinação"]')
               const parsed = JSON.parse(u.servicos);
               if (Array.isArray(parsed)) {
                 servicosStr = parsed.join(', ');
@@ -220,7 +207,6 @@ async function handleChat(request: Request, env: any) {
                 servicosStr = u.servicos;
               }
             } catch {
-              // Se não for JSON, limpa chaves do Postgres se houver (ex: {Clínica,Vacinação})
               servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
             }
           }
@@ -228,9 +214,6 @@ async function handleChat(request: Request, env: any) {
           return `• Nome: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
         }).join('\n')
       : 'Nenhuma unidade cadastrada no momento.';
-
-    console.log("=== TEXTO SAÚDE ===");
-console.log(textoSaude);
 
     const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
       `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
@@ -245,18 +228,16 @@ console.log(textoSaude);
       return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}${promo}`;
     }).join('\n') || 'Nenhuma empresa cadastrada.';
 
-    // 👇 Correção: Seção de Anúncios adicionada e formatada
-  const textoAnuncios = dados?.anuncios.map((a: any) => {
-  const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
-  const vendedor = a.nome_vendedor ? ` | Vendedor: ${a.nome_vendedor}` : '';
-  const contato = a.telefone_vendedor ? ` | Contato/Tel: ${a.telefone_vendedor}` : '';
-  const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
-  return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${vendedor}${contato}${desc}`;
-}).join('\n') || 'Nenhum anúncio recente no momento.';
+    const textoAnuncios = dados?.anuncios.map((a: any) => {
+      const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
+      const vendedor = a.nome_vendedor ? ` | Vendedor: ${a.nome_vendedor}` : '';
+      const contato = a.telefone_vendedor ? ` | Contato/Tel: ${a.telefone_vendedor}` : '';
+      const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
+      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${vendedor}${contato}${desc}`;
+    }).join('\n') || 'Nenhum anúncio recente no momento.';
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // 👇 Correção: systemPrompt atualizado para injetar anúncios
     const systemPrompt = `
 Você é o assistente virtual do projeto "Meu Suaçuí", focado exclusivamente na cidade de São Brás do Suaçuí, Minas Gerais.
 Hoje é ${dataHoje}.
@@ -336,7 +317,6 @@ export default {
   async fetch(request: Request, env: any, ctx: unknown) {
     const url = new URL(request.url);
     
-    // ROTAS DE API
     if (url.pathname === '/api/test') {
       const apiKey = getApiKey(env);
       return new Response(
@@ -355,7 +335,6 @@ export default {
       return handleChat(request, env);
     }
     
-    // Rotas do TanStack Start
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
