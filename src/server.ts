@@ -1,8 +1,9 @@
-// src/server.ts
 import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import OpenAI from 'openai';
+import { createClient } from '@supabase/supabase-js';
+import "dotenv/config";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -48,7 +49,7 @@ function isH3SwallowedErrorBody(body: string): boolean {
 }
 
 // ============================================
-// AUXILIAR: OBTER API KEY DORMIDA/CONFIGURADA
+// AUXILIARES E CONFIGURAÇÃO
 // ============================================
 
 function getApiKey(env: any): string | null {
@@ -61,15 +62,10 @@ function getApiKey(env: any): string | null {
   );
 }
 
-// ============================================
-// CONFIGURAÇÃO DO CLIENTE DE IA
-// ============================================
-
 function createAiClient(env: any): OpenAI | null {
   const apiKey = getApiKey(env);
   if (!apiKey) return null;
 
-  // Detecta automaticamente se é Groq (gsk_) ou xAI (xai-)
   const isGroq = apiKey.startsWith('gsk_');
   const baseURL = isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1';
 
@@ -79,91 +75,86 @@ function createAiClient(env: any): OpenAI | null {
   });
 }
 
-// ============================================
-// BASE DE CONHECIMENTO LOCAL (FALLBACK)
-// ============================================
+function getSupabaseClient(env: any) {
+  const url = env?.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
+  const key = env?.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ''; 
 
-const conhecimento = {
-  farmacia: [
-    "Farmácia São Brás - Rua Principal, 123 - Funcionamento: 08:00 às 22:00",
-    "Farmácia Central - Av. Minas Gerais, 456 - Funcionamento: 24 horas",
-    "Farmácia Popular - Rua da Matriz, 789 - Funcionamento: 07:00 às 21:00"
-  ],
-  saude: [
-    "Hospital Municipal de São Brás - Av. Saúde, 100 - Atendimento 24h",
-    "Posto de Saúde Central - Rua da Saúde, 50 - 07:00 às 17:00",
-    "UPA - Unidade de Pronto Atendimento - Av. Principal, 200 - 24h"
-  ],
-  eventos: [
-    "Festa do Padroeiro São Brás - Janeiro",
-    "Carnaval de São Brás - Fevereiro",
-    "Festa Junina - Junho",
-    "Aniversário da Cidade - Agosto",
-    "Natal Iluminado - Dezembro"
-  ],
-  restaurantes: [
-    "Sabor Mineiro - Av. Central, 100 - Comida caseira",
-    "Pizzaria da Praça - Praça da Matriz, 5",
-    "Lanchonete do Zé - Rua Comercial, 30",
-    "Restaurante Popular - Av. Principal, 150"
-  ],
-  turismo: [
-    "Igreja Matriz de São Brás - Construída em 1920",
-    "Mirante do Cruzeiro - Vista panorâmica da cidade",
-    "Cachoeira do Salto - 5km do centro",
-    "Praça Central - Coreto e jardins"
-  ],
-  prefeitura: [
-    "Prefeitura Municipal - Praça da Matriz, s/n",
-    "Atendimento: 08:00 às 17:00",
-    "Telefone: (31) 9999-9999"
-  ],
-};
+  if(!url || !key) return null;
 
-function buscarInformacaoLocal(pergunta: string): string {
-  const perguntaLower = pergunta.toLowerCase();
-  
-  if (perguntaLower.includes('farmácia') || perguntaLower.includes('farmacia') || perguntaLower.includes('remédio')) {
-    return "💊 **Farmácias em São Brás do Suaçuí:**\n\n" + conhecimento.farmacia.map(f => `• ${f}`).join('\n');
-  }
-  
-  if (perguntaLower.includes('saúde') || perguntaLower.includes('saude') || perguntaLower.includes('hospital') || perguntaLower.includes('posto')) {
-    return "🏥 **Unidades de Saúde:**\n\n" + conhecimento.saude.map(s => `• ${s}`).join('\n');
-  }
-  
-  if (perguntaLower.includes('evento') || perguntaLower.includes('agenda') || perguntaLower.includes('festa')) {
-    return "📅 **Eventos e Festas:**\n\n" + conhecimento.eventos.map(e => `• ${e}`).join('\n');
-  }
-  
-  if (perguntaLower.includes('restaurante') || perguntaLower.includes('comer') || perguntaLower.includes('comida')) {
-    return "🍽️ **Restaurantes e Lanchonetes:**\n\n" + conhecimento.restaurantes.map(r => `• ${r}`).join('\n');
-  }
-  
-  if (perguntaLower.includes('turismo') || perguntaLower.includes('turístico') || perguntaLower.includes('cachoeira')) {
-    return "🏛️ **Pontos Turísticos:**\n\n" + conhecimento.turismo.map(t => `• ${t}`).join('\n');
-  }
-  
-  if (perguntaLower.includes('prefeitura') || perguntaLower.includes('iptu') || perguntaLower.includes('serviço')) {
-    return "🏛️ **Prefeitura Municipal:**\n\n" + conhecimento.prefeitura.map(p => `• ${p}`).join('\n');
-  }
-  
-  return `📌 **São Brás do Suaçuí**
-
-Sua pergunta: "${pergunta}"
-
-Posso ajudar com:
-• 💊 Farmácias
-• 🏥 Saúde
-• 📅 Eventos
-• 🍽️ Restaurantes
-• 🏛️ Turismo
-• 🏛️ Prefeitura
-
-O que você gostaria de saber?`;
+  return createClient(url, key, {
+    auth: { persistSession: false },
+    global: {
+      fetch: fetch,
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`
+      }
+    }
+  });
 }
 
 // ============================================
-// HANDLER DO CHAT COM IA
+// BUSCA DINÂMICA NO SUPABASE (CORRIGIDA)
+// ============================================
+
+async function buscarInformacoesSupabase(env: any) {
+  const url = env?.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
+  const key = env?.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'SUA_CHAVE_AQUI';
+
+  // 👇 Correção: Removido o bloqueio da sua chave real
+  if (!url || !key || key === 'SUA_CHAVE_AQUI') {
+    console.error('❌ ERRO: URL ou Chave ausente para o fetch nativo.');
+    return null;
+  }
+
+  const headers = {
+    'apikey': key,
+    'Authorization': `Bearer ${key}`,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const [
+      eventosRes, empresasRes, anunciosRes, comunicadosRes, 
+      noticiasRes, unidadesRes, emergenciasRes, campanhasRes
+    ] = await Promise.all([
+      fetch(`${url}/rest/v1/eventos?select=*&data_hora_inicio=gte.${new Date().toISOString()}&order=data_hora_inicio.asc&limit=10`, { headers }),
+      fetch(`${url}/rest/v1/empresas?select=*&limit=20`, { headers }),
+      fetch(`${url}/rest/v1/anuncios?select=*&order=created_at.desc&limit=20`, { headers }),
+      fetch(`${url}/rest/v1/comunicados_prefeitura?select=*&order=data_publicacao.desc&limit=5`, { headers }),
+      fetch(`${url}/rest/v1/noticias?select=*&order=data_publicacao.desc&limit=5`, { headers }),
+      fetch(`${url}/rest/v1/saude_unidades?select=*`, { headers }),
+      fetch(`${url}/rest/v1/saude_emergencias?select=*`, { headers }),
+      fetch(`${url}/rest/v1/saude_campanhas?select=*`, { headers })
+    ]);
+
+    const eventos = await eventosRes.json();
+    const empresas = await empresasRes.json();
+    const anuncios = await anunciosRes.json();
+    const comunicados = await comunicadosRes.json();
+    const noticias = await noticiasRes.json();
+    const unidadesSaude = await unidadesRes.json();
+    const emergenciasSaude = await emergenciasRes.json();
+    const campanhasSaude = await campanhasRes.json();
+
+    return {
+      eventos: Array.isArray(eventos) ? eventos : [],
+      empresas: Array.isArray(empresas) ? empresas : [],
+      anuncios: Array.isArray(anuncios) ? anuncios : [],
+      comunicados: Array.isArray(comunicados) ? comunicados : [],
+      noticias: Array.isArray(noticias) ? noticias : [],
+      unidadesSaude: Array.isArray(unidadesSaude) ? unidadesSaude : [],
+      emergenciasSaude: Array.isArray(emergenciasSaude) ? emergenciasSaude : [],
+      campanhasSaude: Array.isArray(campanhasSaude) ? campanhasSaude : []
+    };
+  } catch (error) {
+    console.error('❌ Erro no fetch nativo ao Supabase:', error);
+    return null;
+  }
+}
+
+// ============================================
+// HANDLER DO CHAT COM IA (CORRIGIDO)
 // ============================================
 
 async function handleChat(request: Request, env: any) {
@@ -180,110 +171,106 @@ async function handleChat(request: Request, env: any) {
       );
     }
 
-    const userMessage = messages[messages.length - 1]?.content || '';
     const aiClient = createAiClient(env);
     const apiKey = getApiKey(env) || '';
 
-    if (aiClient && apiKey) {
-      console.log('🤖 Gerando resposta com a IA...');
-      
-      try {
-        const isGroq = apiKey.startsWith('gsk_');
-        
-        // Modelo Groq vs xAI
-        const modelName = isGroq ? 'llama-3.3-70b-versatile' : 'grok-2-latest';
-
-        const systemPrompt = `
-Você é o assistente virtual do projeto "Meu Suaçuí", especializado na cidade de São Brás do Suaçuí, Minas Gerais, sarcástico e engraçado com sotaque de Minas Gerais.
-
-INFORMAÇÕES GERAIS DA CIDADE:
-- Cidade mineira com aproximadamente 8.000 habitantes
-- Conhecida por sua hospitalidade e tradições
-- Economia baseada em agricultura, pecuária e comércio local
-- Possui belas paisagens, igrejas históricas e cachoeiras
-
-FARMÁCIAS EM SÃO BRÁS DO SUAÇUÍ:
-- Farmácia São Brás - Rua Principal, 123 - Funcionamento: 08:00 às 22:00
-- Farmácia Central - Av. Minas Gerais, 456 - Funcionamento: 24 HORAS (plantão todos os dias, sempre aberta)
-- Farmácia Popular - Rua da Matriz, 789 - Funcionamento: 07:00 às 21:00
-
-ATENÇÃO: A Farmácia Central (Av. Minas Gerais, 456) funciona 24 horas por dia, todos os dias. É o ponto de referência para medicamentos em horário de plantão/noturno. Se alguém perguntar sobre farmácia de plantão, indique a Farmácia Central como a opção disponível 24h.
-
-SERVIÇOS DE SAÚDE:
-- Hospital Municipal de São Brás - Av. Saúde, 100 - Atendimento 24h
-- Posto de Saúde Central - Rua da Saúde, 50 - 07:00 às 17:00
-- UPA - Unidade de Pronto Atendimento - Av. Principal, 200 - 24h
-
-RESTAURANTES E LANCHONETES:
-- Sabor Mineiro - Av. Central, 100 - Comida caseira
-- Pizzaria da Praça - Praça da Matriz, 5
-- Lanchonete do Zé - Rua Comercial, 30
-- Restaurante Popular - Av. Principal, 150
-
-EVENTOS TRADICIONAIS:
-- Festa do Padroeiro São Brás - Janeiro
-- Carnaval de São Brás - Fevereiro
-- Festa Junina - Junho
-- Aniversário da Cidade - Agosto
-- Natal Iluminado - Dezembro
-
-PONTOS TURÍSTICOS:
-- Igreja Matriz de São Brás - Construída em 1920
-- Mirante do Cruzeiro - Vista panorâmica da cidade
-- Cachoeira do Salto - 5km do centro
-- Praça Central - Coreto e jardins
-
-PREFEITURA MUNICIPAL:
-- Praça da Matriz, s/n
-- Atendimento: 08:00 às 17:00
-- Telefone: (31) 9999-9999
-
-INSTRUÇÕES DE RESPOSTA:
-- Responda SEMPRE usando as informações acima. NUNCA diga que não tem informação.
-- Se perguntarem sobre farmácia de plantão, responda que a Farmácia Central (Av. Minas Gerais, 456) funciona 24 horas, todos os dias.
-- Seja específico, dê nomes, endereços e horários quando disponíveis.
-- Responda de forma amigável, cordial e útil, focando SOMENTE em São Brás do Suaçuí.
-- Se a pergunta não for sobre a cidade, responda educadamente que você é especializado apenas em São Brás do Suaçuí.
-`;
-
-        const response = await aiClient.chat.completions.create({
-          model: modelName,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            ...messages
-          ],
-          temperature: 0.7,
-          max_tokens: 600,
-        });
-
-        const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta.';
-        
-        return new Response(
-          JSON.stringify({ message: resposta }),
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-
-      } catch (aiError: any) {
-        console.error('❌ Erro na API de IA:', aiError?.message || aiError);
-        
-        const fallback = buscarInformacaoLocal(userMessage);
-        return new Response(
-          JSON.stringify({ 
-            message: fallback,
-            warning: '⚠️ Usando modo fallback (IA indisponível)'
-          }),
-          { headers: { 'Content-Type': 'application/json' } }
-        );
-      }
+    if (!aiClient || !apiKey) {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Desculpe, a IA não está configurada no servidor (falta GROQ_API_KEY / XAI_API_KEY).',
+          warning: 'Configure as variáveis de ambiente.'
+        }),
+        { headers: { 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Fallback caso não haja chave configurada
-    const resposta = buscarInformacaoLocal(userMessage);
+    const dados = await buscarInformacoesSupabase(env);
+
+    // Formatação das seções com dados do Supabase
+    const textoSaude = dados?.unidadesSaude.map((u: any) => {
+      const servicos = Array.isArray(u.servicos) ? u.servicos.join(', ') : (u.servicos || 'Atendimento Geral');
+      return `• ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicos}`;
+    }).join('\n') || 'Nenhuma unidade cadastrada no momento.';
+
+    const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
+      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
+    ).join('\n') || 'Contatos padrão: Polícia 190, SAMU 192, Bombeiros 193.';
+
+    const textoCampanhas = dados?.campanhasSaude.map((c: any) => 
+      `• ${c.titulo} | Período: ${c.periodo} | Público: ${c.publico_alvo}`
+    ).join('\n') || 'Nenhuma campanha cadastrada.';
+
+    const textoEmpresas = dados?.empresas.map((e: any) => {
+      const promo = e.promocao_ativa ? ` [PROMOÇÃO: ${e.descricao_promocao}]` : '';
+      return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}${promo}`;
+    }).join('\n') || 'Nenhuma empresa cadastrada.';
+
+    // 👇 Correção: Seção de Anúncios adicionada e formatada
+    const textoAnuncios = dados?.anuncios.map((a: any) => {
+      const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
+      const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
+      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${desc}`;
+    }).join('\n') || 'Nenhum anúncio recente no momento.';
+
+    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // 👇 Correção: systemPrompt atualizado para injetar anúncios
+    const systemPrompt = `
+Você é o assistente virtual do projeto "Meu Suaçuí", focado exclusivamente na cidade de São Brás do Suaçuí, Minas Gerais.
+Hoje é ${dataHoje}.
+
+Responda às dúvidas dos cidadãos e visitantes baseando-se RIGOROSAMENTE nos dados oficiais do banco de dados abaixo:
+
+🛍️ CLASSIFICADOS E ANÚNCIOS DA COMUNIDADE:
+${textoAnuncios}
+
+🏢 COMÉRCIO E EMPRESAS LOCAIS:
+${textoEmpresas}
+
+🏥 SAÚDE - UNIDADES E POSTOS:
+${textoSaude}
+
+🚨 SAÚDE - EMERGÊNCIAS E TELEFONES:
+${textoEmergencias}
+
+💉 SAÚDE - CAMPANHAS E VACINAÇÃO:
+${textoCampanhas}
+
+📅 EVENTOS AGENDADOS:
+${dados?.eventos.map((e: any) => `• ${e.titulo} em ${e.local || 'São Brás'} - Início: ${new Date(e.data_hora_inicio).toLocaleString('pt-BR')}`).join('\n') || 'Nenhum evento agendado.'}
+
+📢 COMUNICADOS DA PREFEITURA:
+${dados?.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente.'}
+
+📰 NOTÍCIAS DA CIDADE:
+${dados?.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo || ''}`).join('\n') || 'Nenhuma notícia no momento.'}
+
+INSTRUÇÕES DE COMPORTAMENTO:
+1. Responda de forma cortês, objetiva e útil.
+2. IMPORTANTE: Se o usuário perguntar por compras, produtos (ex: sofá, móveis, carros) ou itens à venda, VERIFIQUE TANTO A LISTA DE EMPRESAS QUANTO A LISTA DE CLASSIFICADOS E ANÚNCIOS acima.
+3. Se o usuário perguntar horários ou se algo está aberto hoje, compare com os horários informados nas listas e considere a data de hoje.
+4. Se a informação solicitada não estiver na base cadastrada acima, informe educadamente que o dado ainda não foi registrado no aplicativo.
+`;
+
+    const isGroq = apiKey.startsWith('gsk_');
+    const modelName = isGroq ? 'llama-3.3-70b-versatile' : 'grok-2-latest';
+
+    console.log(`🤖 Gerando resposta com ${isGroq ? 'Groq' : 'xAI'}...`);
+
+    const response = await aiClient.chat.completions.create({
+      model: modelName,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.5,
+      max_tokens: 600,
+    });
+
+    const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
+    
     return new Response(
-      JSON.stringify({ 
-        message: resposta,
-        warning: 'ℹ️ Modo offline - Configure XAI_API_KEY ou GROQ_API_KEY no .env'
-      }),
+      JSON.stringify({ message: resposta }),
       { headers: { 'Content-Type': 'application/json' } }
     );
 
