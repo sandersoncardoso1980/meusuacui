@@ -76,10 +76,13 @@ function createAiClient(env: any): OpenAI | null {
 }
 
 function getSupabaseClient(env: any) {
-  const url = env?.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
-  const key = env?.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || ''; 
+  const url = env?.SUPABASE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
+  const key = env?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''; 
 
-  if(!url || !key) return null;
+  if(!url || !key) {
+    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas nas variáveis de ambiente!');
+    return null;
+  }
 
   return createClient(url, key, {
     auth: { persistSession: false },
@@ -91,6 +94,7 @@ function getSupabaseClient(env: any) {
       }
     }
   });
+}
 }
 
 // ============================================
