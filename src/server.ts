@@ -187,9 +187,16 @@ async function handleChat(request: Request, env: any) {
     const dados = await buscarInformacoesSupabase(env);
 
     // Formatação das seções com dados do Supabase
+    // 👇 Correção robusta para tratar o array de serviços do Postgres text[]
     const textoSaude = dados?.unidadesSaude.map((u: any) => {
-      const servicos = Array.isArray(u.servicos) ? u.servicos.join(', ') : (u.servicos || 'Atendimento Geral');
-      return `• ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicos}`;
+      let servicosStr = 'Atendimento Geral';
+      if (Array.isArray(u.servicos)) {
+        servicosStr = u.servicos.join(', ');
+      } else if (typeof u.servicos === 'string') {
+        // Trata caso o Postgres retorne o array em formato string (ex: "{Clínica,Vacinação}")
+        servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
+      }
+      return `• Nome: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
     }).join('\n') || 'Nenhuma unidade cadastrada no momento.';
 
     const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
