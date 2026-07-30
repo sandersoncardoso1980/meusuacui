@@ -97,58 +97,56 @@ function getSupabaseClient(env: any) {
 // BUSCA DINÂMICA NO SUPABASE (CORRIGIDA)
 // ============================================
 
-async function buscarInformacoesSupabase(env: any) {
-  const url = env?.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
-  const key = env?.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'SUA_CHAVE_AQUI';
+// ============================================
+// BUSCA DINÂMICA NO SUPABASE (USANDO O CLIENTE OFICIAL)
+// ============================================
 
-  // 👇 Correção: Removido o bloqueio da sua chave real
-  if (!url || !key || key === 'SUA_CHAVE_AQUI') {
-    console.error('❌ ERRO: URL ou Chave ausente para o fetch nativo.');
+async function buscarInformacoesSupabase(env: any) {
+  const supabaseClient = getSupabaseClient(env);
+  if (!supabaseClient) {
+    console.error('❌ ERRO: Cliente Supabase não inicializado.');
     return null;
   }
 
-  const headers = {
-    'apikey': key,
-    'Authorization': `Bearer ${key}`,
-    'Content-Type': 'application/json'
-  };
-
   try {
     const [
-      eventosRes, empresasRes, anunciosRes, comunicadosRes, 
-      noticiasRes, unidadesRes, emergenciasRes, campanhasRes
+      { data: eventos },
+      { data: empresas },
+      { data: anuncios },
+      { data: comunicados },
+      { data: noticias },
+      { data: unidadesSaude, error: erroUnidades },
+      { data: emergenciasSaude },
+      { data: campanhasSaude }
     ] = await Promise.all([
-      fetch(`${url}/rest/v1/eventos?select=*&data_hora_inicio=gte.${new Date().toISOString()}&order=data_hora_inicio.asc&limit=10`, { headers }),
-      fetch(`${url}/rest/v1/empresas?select=*&limit=20`, { headers }),
-      fetch(`${url}/rest/v1/anuncios?select=*&order=created_at.desc&limit=20`, { headers }),
-      fetch(`${url}/rest/v1/comunicados_prefeitura?select=*&order=data_publicacao.desc&limit=5`, { headers }),
-      fetch(`${url}/rest/v1/noticias?select=*&order=data_publicacao.desc&limit=5`, { headers }),
-      fetch(`${url}/rest/v1/saude_unidades?select=*`, { headers }),
-      fetch(`${url}/rest/v1/saude_emergencias?select=*`, { headers }),
-      fetch(`${url}/rest/v1/saude_campanhas?select=*`, { headers })
+      supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10),
+      supabaseClient.from('empresas').select('*').limit(20),
+      supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20),
+      supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(5),
+      supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(5),
+      supabaseClient.from('saude_unidades').select('*'),
+      supabaseClient.from('saude_emergencias').select('*'),
+      supabaseClient.from('saude_campanhas').select('*'),
     ]);
 
-    const eventos = await eventosRes.json();
-    const empresas = await empresasRes.json();
-    const anuncios = await anunciosRes.json();
-    const comunicados = await comunicadosRes.json();
-    const noticias = await noticiasRes.json();
-    const unidadesSaude = await unidadesRes.json();
-    const emergenciasSaude = await emergenciasRes.json();
-    const campanhasSaude = await campanhasRes.json();
+    if (erroUnidades) {
+      console.error('❌ Erro ao buscar saude_unidades:', erroUnidades);
+    } else {
+      console.log('✅ Unidades de saúde carregadas com sucesso:', unidadesSaude);
+    }
 
     return {
-      eventos: Array.isArray(eventos) ? eventos : [],
-      empresas: Array.isArray(empresas) ? empresas : [],
-      anuncios: Array.isArray(anuncios) ? anuncios : [],
-      comunicados: Array.isArray(comunicados) ? comunicados : [],
-      noticias: Array.isArray(noticias) ? noticias : [],
-      unidadesSaude: Array.isArray(unidadesSaude) ? unidadesSaude : [],
-      emergenciasSaude: Array.isArray(emergenciasSaude) ? emergenciasSaude : [],
-      campanhasSaude: Array.isArray(campanhasSaude) ? campanhasSaude : []
+      eventos: eventos ?? [],
+      empresas: empresas ?? [],
+      anuncios: anuncios ?? [],
+      comunicados: comunicados ?? [],
+      noticias: noticias ?? [],
+      unidadesSaude: unidadesSaude ?? [],
+      emergenciasSaude: emergenciasSaude ?? [],
+      campanhasSaude: campanhasSaude ?? []
     };
   } catch (error) {
-    console.error('❌ Erro no fetch nativo ao Supabase:', error);
+    console.error('❌ Erro crítico ao buscar dados do Supabase:', error);
     return null;
   }
 }
