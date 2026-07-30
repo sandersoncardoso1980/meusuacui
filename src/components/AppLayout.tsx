@@ -16,7 +16,6 @@ import {
   Sun,
   Heart,
   User as UserIcon,
-  Plus,
   MapPin,
   Bell,
   ChevronDown,
@@ -182,9 +181,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
           <div className="grid grid-cols-5 items-end relative">
             {[
               { to: "/", label: "Início", Icon: Home },
-              { to: "/ia-cidade", label: "IA da Cidade", Icon: Bot },
-              { to: "/anuncios", label: "Anunciar", Icon: Plus, primary: true },
-              { to: "/empresas", label: "Favoritos", Icon: Heart },
+              { to: "/empresas", label: "Empresas", Icon: Building2 },
+              { to: "/ia-cidade", label: "IA da Cidade", Icon: Bot, primary: true },
+              { to: "/anuncios", label: "Anúncios", Icon: Megaphone },
               { to: user ? "/admin" : "/auth", label: "Perfil", Icon: UserIcon },
             ].map(({ to, label, Icon, primary }) => (
               <Link
