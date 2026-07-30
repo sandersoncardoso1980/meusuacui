@@ -199,6 +199,8 @@ ${dadosContexto.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).jo
 NOTÍCIAS:
 ${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
+console.log('🚨 AQUIVO SENDO EXECUTADO AGORA - TIMESTAMP:', new Date().toISOString());
+
 Pergunta do usuário: ${userMessage}
 
 Responda de forma amigável e útil sobre São Brás do Suaçuí usando os dados fornecidos acima. Use **negrito** para destacar informações importantes (como endereços e telefones). Seja específico e dê respostas completas e detalhadas.
