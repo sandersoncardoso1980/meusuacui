@@ -200,16 +200,30 @@ async function handleChat(request: Request, env: any) {
 
     // Formatação das seções com dados do Supabase
     // 👇 Correção robusta para tratar o array de serviços do Postgres text[]
-    const textoSaude = dados?.unidadesSaude.map((u: any) => {
-      let servicosStr = 'Atendimento Geral';
-      if (Array.isArray(u.servicos)) {
-        servicosStr = u.servicos.join(', ');
-      } else if (typeof u.servicos === 'string') {
-        // Trata caso o Postgres retorne o array em formato string (ex: "{Clínica,Vacinação}")
-        servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
-      }
-      return `• Nome: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
-    }).join('\n') || 'Nenhuma unidade cadastrada no momento.';
+   const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
+      ? dados.unidadesSaude.map((u: any) => {
+          let servicosStr = 'Atendimento Geral';
+          
+          if (Array.isArray(u.servicos)) {
+            servicosStr = u.servicos.join(', ');
+          } else if (typeof u.servicos === 'string') {
+            try {
+              // Tenta converter caso venha como string JSON (ex: '["Clínica", "Vacinação"]')
+              const parsed = JSON.parse(u.servicos);
+              if (Array.isArray(parsed)) {
+                servicosStr = parsed.join(', ');
+              } else {
+                servicosStr = u.servicos;
+              }
+            } catch {
+              // Se não for JSON, limpa chaves do Postgres se houver (ex: {Clínica,Vacinação})
+              servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
+            }
+          }
+
+          return `• Nome: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
+        }).join('\n')
+      : 'Nenhuma unidade cadastrada no momento.';
 
     const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
       `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
