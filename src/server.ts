@@ -101,6 +101,10 @@ function getSupabaseClient(env: any) {
 // BUSCA DINÂMICA NO SUPABASE (USANDO O CLIENTE OFICIAL)
 // ============================================
 
+// ============================================
+// BUSCA DINÂMICA NO SUPABASE (BLINDADA E SEGURA)
+// ============================================
+
 async function buscarInformacoesSupabase(env: any) {
   const supabaseClient = getSupabaseClient(env);
   if (!supabaseClient) {
@@ -109,41 +113,51 @@ async function buscarInformacoesSupabase(env: any) {
   }
 
   try {
+    // Executa as buscas de forma isolada e nomeada
+    const eventosPromise = supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10);
+    const empresasPromise = supabaseClient.from('empresas').select('*').limit(20);
+    const anunciosPromise = supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20);
+    const comunicadosPromise = supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(5);
+    const noticiasPromise = supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(5);
+    const unidadesPromise = supabaseClient.from('saude_unidades').select('*');
+    const emergenciasPromise = supabaseClient.from('saude_emergencias').select('*');
+    const campanhasPromise = supabaseClient.from('saude_campanhas').select('*');
+
     const [
-      { data: eventos },
-      { data: empresas },
-      { data: anuncios },
-      { data: comunicados },
-      { data: noticias },
-      { data: unidadesSaude, error: erroUnidades },
-      { data: emergenciasSaude },
-      { data: campanhasSaude }
+      eventosRes,
+      empresasRes,
+      anunciosRes,
+      comunicadosRes,
+      noticiasRes,
+      unidadesRes,
+      emergenciasRes,
+      campanhasRes
     ] = await Promise.all([
-      supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10),
-      supabaseClient.from('empresas').select('*').limit(20),
-      supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20),
-      supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(5),
-      supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(5),
-      supabaseClient.from('saude_unidades').select('*'),
-      supabaseClient.from('saude_emergencias').select('*'),
-      supabaseClient.from('saude_campanhas').select('*'),
+      eventosPromise,
+      empresasPromise,
+      anunciosPromise,
+      comunicadosPromise,
+      noticiasPromise,
+      unidadesPromise,
+      emergenciasPromise,
+      campanhasPromise
     ]);
 
-    if (erroUnidades) {
-      console.error('❌ Erro ao buscar saude_unidades:', erroUnidades);
+    if (unidadesRes.error) {
+      console.error('❌ Erro ao buscar saude_unidades:', unidadesRes.error);
     } else {
-      console.log('✅ Unidades de saúde carregadas com sucesso:', unidadesSaude);
+      console.log('✅ Unidades de saúde carregadas com sucesso:', unidadesRes.data);
     }
 
     return {
-      eventos: eventos ?? [],
-      empresas: empresas ?? [],
-      anuncios: anuncios ?? [],
-      comunicados: comunicados ?? [],
-      noticias: noticias ?? [],
-      unidadesSaude: unidadesSaude ?? [],
-      emergenciasSaude: emergenciasSaude ?? [],
-      campanhasSaude: campanhasSaude ?? []
+      eventos: eventosRes.data ?? [],
+      empresas: empresasRes.data ?? [],
+      anuncios: anunciosRes.data ?? [],
+      comunicados: comunicadosRes.data ?? [],
+      noticias: noticiasRes.data ?? [],
+      unidadesSaude: unidadesRes.data ?? [],
+      emergenciasSaude: emergenciasRes.data ?? [],
+      campanhasSaude: campanhasRes.data ?? []
     };
   } catch (error) {
     console.error('❌ Erro crítico ao buscar dados do Supabase:', error);
