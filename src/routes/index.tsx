@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { 
   Home, 
   Bot, 
@@ -16,7 +16,10 @@ import {
 } from "lucide-react";
 import heroCity from "@/assets/hero-city2.jpg";
 
-// Mesma lista oficial do menu lateral para manter a exata mesma serventia e rotas
+export const Route = createFileRoute("/")({
+  component: Index,
+});
+
 const QUICK_NAV = [
   { to: "/", label: "Início", Icon: Home, color: "from-slate-500 to-slate-600" },
   { to: "/ia-cidade", label: "IA da Cidade", Icon: Bot, color: "from-emerald-500 to-teal-600" },
@@ -31,10 +34,9 @@ const QUICK_NAV = [
   { to: "/fale-conosco", label: "Fale Conosco", Icon: Mail, color: "from-teal-600 to-emerald-700" },
 ] as const;
 
-export function Index() {
+function Index() {
   return (
     <div className="space-y-8">
-      
       {/* 1. Banner Principal com Maior Visibilidade e Peso Visual */}
       <div className="relative w-full h-[210px] md:h-[240px] rounded-3xl overflow-hidden shadow-lg ring-1 ring-white/10">
         <div 
@@ -92,7 +94,6 @@ export function Index() {
           ))}
         </div>
       </div>
-
     </div>
   );
 }
