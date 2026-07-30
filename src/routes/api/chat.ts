@@ -35,11 +35,11 @@ const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
 
 async function searchSupabase(query: string) {
   if (!supabase) {
-    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [] }
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [], unidadesSaude: [], emergenciasSaude: [], campanhasSaude: [] }
   }
 
   try {
-    const [eventos, empresas, anuncios, comunicados, noticias] = await Promise.all([
+    const [eventos, empresas, anuncios, comunicados, noticias, unidadesSaude, emergenciasSaude, campanhasSaude] = await Promise.all([
       supabase
         .from('eventos')
         .select('*')
@@ -50,13 +50,13 @@ async function searchSupabase(query: string) {
       supabase
         .from('empresas')
         .select('*')
-        .limit(5),
+        .limit(20),
       
       supabase
         .from('anuncios')
         .select('*')
         .order('created_at', { ascending: false })
-        .limit(5),
+        .limit(20),
       
       supabase
         .from('comunicados_prefeitura')
@@ -69,6 +69,19 @@ async function searchSupabase(query: string) {
         .select('*')
         .order('data_publicacao', { ascending: false })
         .limit(5),
+
+      // 👇 ADICIONADAS AS TABELAS DE SAÚDE AQUI
+      supabase
+        .from('saude_unidades')
+        .select('*'),
+
+      supabase
+        .from('saude_emergencias')
+        .select('*'),
+
+      supabase
+        .from('saude_campanhas')
+        .select('*'),
     ])
 
     return {
@@ -77,10 +90,13 @@ async function searchSupabase(query: string) {
       anuncios: anuncios.data || [],
       comunicados: comunicados.data || [],
       noticias: noticias.data || [],
+      unidadesSaude: unidadesSaude.data || [],
+      emergenciasSaude: emergenciasSaude.data || [],
+      campanhasSaude: campanhasSaude.data || [],
     }
   } catch (error) {
     console.error('Erro ao buscar dados do Supabase:', error)
-    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [] }
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [], unidadesSaude: [], emergenciasSaude: [], campanhasSaude: [] }
   }
 }
 
@@ -88,7 +104,6 @@ async function searchSupabase(query: string) {
 // HANDLER DA ROTA (padrão do TanStack Start)
 // ============================================
 
-// O TanStack Start espera exportações named como POST, GET, etc.
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await request.json() as RequestBody
@@ -104,58 +119,70 @@ export async function POST(request: Request): Promise<Response> {
     const userMessage = messages[messages.length - 1].content
     console.log('📩 Pergunta recebida:', userMessage)
 
-    // Busca dados no Supabase
+    // Busca dados no Supabase (já incluindo saúde)
     const dadosContexto = await searchSupabase(userMessage)
 
-    // Se não tiver Gemini, retorna resposta com dados
+    // Formatação segura dos dados de saúde
+    const textoSaude = dadosContexto.unidadesSaude.map((u: any) => {
+      let servicosStr = 'Atendimento Geral'
+      if (Array.isArray(u.servicos)) {
+        servicosStr = u.servicos.join(', ')
+      } else if (typeof u.servicos === 'string') {
+        servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ')
+      }
+      return `• Unidade: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`
+    }).join('\n') || 'Nenhuma unidade cadastrada'
+
+    const textoEmergencias = dadosContexto.emergenciasSaude.map((e: any) => 
+      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
+    ).join('\n') || 'Bombeiros 193, Polícia 190, SAMU 192'
+
+    const textoCampanhas = dadosContexto.campanhasSaude.map((c: any) => 
+      `• ${c.titulo} | Período: ${c.periodo}`
+    ).join('\n') || 'Nenhuma campanha ativa'
+
+    // Se não tiver Gemini, retorna resposta estruturada
     if (!genAI) {
       let resposta = '📌 **Informações sobre São Brás do Suaçuí**\n\n'
       resposta += `Sua pergunta: "${userMessage}"\n\n`
       
-      if (dadosContexto.eventos.length > 0) {
-        resposta += '📅 **Eventos Próximos:**\n'
-        dadosContexto.eventos.forEach((e: any) => {
-          resposta += `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}\n`
+      if (dadosContexto.unidadesSaude.length > 0) {
+        resposta += '🏥 **Unidades de Saúde:**\n'
+        dadosContexto.unidadesSaude.forEach((u: any) => {
+          resposta += `• ${u.nome} - ${u.endereco} (${u.horario})\n`
+        })
+        resposta += '\n'
+      }
+
+      if (dadosContexto.emergenciasSaude.length > 0) {
+        resposta += '🚨 **Emergências:**\n'
+        dadosContexto.emergenciasSaude.forEach((e: any) => {
+          resposta += `• ${e.nome}: ${e.telefone}\n`
         })
         resposta += '\n'
       }
       
-      if (dadosContexto.empresas.length > 0) {
-        resposta += '🏪 **Empresas e Serviços:**\n'
-        dadosContexto.empresas.forEach((e: any) => {
-          resposta += `• ${e.nome} - ${e.categoria}${e.endereco ? ` - ${e.endereco}` : ''}\n`
-        })
-        resposta += '\n'
-      }
-      
-      if (dadosContexto.comunicados.length > 0) {
-        resposta += '📢 **Comunicados Recentes:**\n'
-        dadosContexto.comunicados.forEach((c: any) => {
-          resposta += `• ${c.titulo}: ${c.conteudo}\n`
-        })
-        resposta += '\n'
-      }
-      
-      if (dadosContexto.noticias.length > 0) {
-        resposta += '📰 **Notícias Recentes:**\n'
-        dadosContexto.noticias.forEach((n: any) => {
-          resposta += `• ${n.titulo}: ${n.resumo}\n`
-        })
-        resposta += '\n'
-      }
-      
-      resposta += '\n💡 **Dica:** Configure a chave GEMINI_API_KEY no arquivo .env para respostas mais inteligentes!'
+      resposta += '\n💡 **Dica:** Configure a chave GEMINI_API_KEY no arquivo .env!'
       
       return new Response(JSON.stringify({ message: resposta }), {
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    // Prepara o contexto para o Gemini
+    // Prepara o contexto completo para o Gemini
     const contexto = `
 Você é um assistente virtual especializado em informações sobre a cidade de São Brás do Suaçuí, Minas Gerais.
 
 Aqui estão os dados atualizados da cidade:
+
+🏥 SAÚDE - UNIDADES E POSTOS:
+${textoSaude}
+
+🚨 SAÚDE - EMERGÊNCIAS E TELEFONES ÚTEIS:
+${textoEmergencias}
+
+💉 SAÚDE - CAMPANHAS:
+${textoCampanhas}
 
 EVENTOS:
 ${dadosContexto.eventos.map((e: any) => `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}`).join('\n') || 'Nenhum evento cadastrado'}
@@ -174,7 +201,7 @@ ${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\
 
 Pergunta do usuário: ${userMessage}
 
-Responda de forma amigável e útil sobre São Brás do Suaçuí usando os dados fornecidos. Use **negrito** para destacar informações importantes. Seja específico e dê respostas completas e detalhadas.
+Responda de forma amigável e útil sobre São Brás do Suaçuí usando os dados fornecidos acima. Use **negrito** para destacar informações importantes (como endereços e telefones). Seja específico e dê respostas completas e detalhadas.
     `
 
     // Chama o Gemini
