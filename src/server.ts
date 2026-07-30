@@ -225,6 +225,9 @@ async function handleChat(request: Request, env: any) {
         }).join('\n')
       : 'Nenhuma unidade cadastrada no momento.';
 
+    console.log("=== TEXTO SAÚDE ===");
+console.log(textoSaude);
+
     const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
       `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
     ).join('\n') || 'Contatos padrão: Polícia 190, SAMU 192, Bombeiros 193.';
