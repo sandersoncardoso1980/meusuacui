@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { supabase } from "@/integrations/supabase/client";
-import { Search } from "lucide-react";
+import { Search, Phone, User } from "lucide-react";
 
 export const Route = createFileRoute("/anuncios")({
   head: () => ({
@@ -65,19 +65,59 @@ function Anuncios() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 animate-reveal">
-        {filtered.map((a) => (
-          <article key={a.id} className="bg-card rounded-xl ring-1 ring-black/5 overflow-hidden hover:shadow-md transition-shadow">
-            <div className="aspect-video bg-muted flex items-center justify-center text-4xl">📦</div>
-            <div className="p-4">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{a.categoria}</span>
-              <h3 className="font-bold mt-1 line-clamp-1">{a.titulo}</h3>
-              <p className="text-xs text-muted-foreground line-clamp-2 mt-1 min-h-8">{a.descricao}</p>
-              <p className="mt-3 text-lg font-mono font-bold text-primary">
-                {a.preco ? `R$ ${Number(a.preco).toLocaleString("pt-BR")}` : "Sob consulta"}
-              </p>
-            </div>
-          </article>
-        ))}
+        {filtered.map((a) => {
+          // Pega a primeira imagem do array imagens_urls
+          const imagemPrincipal = a.imagens_urls?.[0];
+
+          return (
+            <article key={a.id} className="bg-card rounded-xl ring-1 ring-black/5 overflow-hidden hover:shadow-md transition-shadow flex flex-col">
+              {/* Exibe a imagem do storage ou um placeholder caso não tenha imagem */}
+              <div className="aspect-video bg-muted relative overflow-hidden flex items-center justify-center">
+                {imagemPrincipal ? (
+                  <img
+                    src={imagemPrincipal}
+                    alt={a.titulo}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-4xl">📦</span>
+                )}
+              </div>
+
+              <div className="p-4 flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">{a.categoria}</span>
+                  <h3 className="font-bold mt-1 line-clamp-1">{a.titulo}</h3>
+                  <p className="text-xs text-muted-foreground line-clamp-2 mt-1 min-h-8">{a.descricao}</p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-border/50">
+                  {/* Nome e Telefone do Vendedor */}
+                  {(a.nome_vendedor || a.telefone_vendedor) && (
+                    <div className="mb-3 space-y-1 text-xs text-muted-foreground">
+                      {a.nome_vendedor && (
+                        <div className="flex items-center gap-1.5">
+                          <User className="size-3.5" />
+                          <span className="truncate">{a.nome_vendedor}</span>
+                        </div>
+                      )}
+                      {a.telefone_vendedor && (
+                        <div className="flex items-center gap-1.5">
+                          <Phone className="size-3.5" />
+                          <span>{a.telefone_vendedor}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <p className="text-lg font-mono font-bold text-primary">
+                    {a.preco ? `R$ ${Number(a.preco).toLocaleString("pt-BR")}` : "Sob consulta"}
+                  </p>
+                </div>
+              </div>
+            </article>
+          );
+        })}
         {filtered.length === 0 && (
           <p className="col-span-full text-center text-muted-foreground py-12">Nenhum anúncio encontrado.</p>
         )}
