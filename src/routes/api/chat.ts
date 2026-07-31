@@ -1,262 +1,237 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+// src/routes/api/chat.ts
+import OpenAI from 'openai'
+import { createClient } from '@supabase/supabase-js'
 
-// Interfaces de tipagem
-interface Evento {
-  titulo: string;
-  data_hora_inicio: string;
-  local: string;
+// ============================================
+// TIPOS
+// ============================================
+
+interface Message {
+  role: 'user' | 'assistant' | 'system'
+  content: string
 }
 
-interface Empresa {
-  nome: string;
-  categoria: string;
-  endereco?: string;
+interface RequestBody {
+  messages: Message[]
 }
 
-interface Anuncio {
-  titulo: string;
-  categoria: string;
-  preco?: number;
-}
+// ============================================
+// CONFIGURAÇÕES
+// ============================================
 
-interface Comunicado {
-  titulo: string;
-  conteudo: string;
-}
+const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY
+const aiClient = apiKey
+  ? new OpenAI({
+      apiKey,
+      baseURL: 'https://api.x.ai/v1',
+    })
+  : null
 
-interface Noticia {
-  titulo: string;
-  resumo: string;
-}
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null
 
-interface UnidadeSaude {
-  nome: string;
-  endereco: string;
-  horario: string;
-  servicos?: string[] | string;
-}
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
 
-interface EmergenciaSaude {
-  nome: string;
-  telefone: string;
-  descricao?: string;
-}
-
-interface CampanhaSaude {
-  titulo: string;
-  periodo: string;
-  publico_alvo: string;
-}
-
-interface DicaSaude {
-  orientacao: string;
-}
-
-interface DadosContexto {
-  eventos: Evento[];
-  empresas: Empresa[];
-  anuncios: Anuncio[];
-  comunicados: Comunicado[];
-  noticias: Noticia[];
-  unidadesSaude: UnidadeSaude[];
-  emergenciasSaude: EmergenciaSaude[];
-  campanhasSaude: CampanhaSaude[];
-  dicasSaude: DicaSaude[];
-}
-
-// Busca os dados no banco de dados (import dinâmico para evitar crash no carregamento do módulo)
-async function searchSupabase(supabaseUrl: string, supabaseAnonKey: string): Promise<DadosContexto> {
-  const { createClient } = await import('@supabase/supabase-js');
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-  const [eventos, empresas, anuncios, comunicados, noticias, unidadesSaude, emergenciasSaude, campanhasSaude, dicasSaude] = await Promise.all([
-    supabase
-      .from('eventos')
-      .select('*')
-      .gte('data_hora_inicio', new Date().toISOString())
-      .order('data_hora_inicio')
-      .limit(5),
-    supabase
-      .from('empresas')
-      .select('*')
-      .limit(5),
-    supabase
-      .from('anuncios')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5),
-    supabase
-      .from('comunicados_prefeitura')
-      .select('*')
-      .order('data_publicacao', { ascending: false })
-      .limit(5),
-    supabase
-      .from('noticias')
-      .select('*')
-      .order('data_publicacao', { ascending: false })
-      .limit(5),
-    supabase
-      .from('saude_unidades')
-      .select('*'),
-    supabase
-      .from('saude_emergencias')
-      .select('*'),
-    supabase
-      .from('saude_campanhas')
-      .select('*'),
-    supabase
-      .from('saude_dicas')
-      .select('*'),
-  ]);
-
-  return {
-    eventos: (eventos.data || []) as Evento[],
-    empresas: (empresas.data || []) as Empresa[],
-    anuncios: (anuncios.data || []) as Anuncio[],
-    comunicados: (comunicados.data || []) as Comunicado[],
-    noticias: (noticias.data || []) as Noticia[],
-    unidadesSaude: (unidadesSaude.data || []) as UnidadeSaude[],
-    emergenciasSaude: (emergenciasSaude.data || []) as EmergenciaSaude[],
-    campanhasSaude: (campanhasSaude.data || []) as CampanhaSaude[],
-    dicasSaude: (dicasSaude.data || []) as DicaSaude[],
-  };
-}
-
-// Handler nativo da Vercel
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Permite apenas método POST
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Método não permitido' });
-  }
-
-  // Busca a chave do Groq/Grok configurada no painel da Vercel
-  const apiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY;
-
-  if (!apiKey) {
-    return res.status(500).json({ error: 'A chave GROQ_API_KEY ou GROK_API_KEY não foi encontrada nas variáveis da Vercel.' });
-  }
-
-  // Valida variáveis do Supabase ANTES de tentar criar o cliente
-  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    return res.status(500).json({
-      error: 'As variáveis SUPABASE_URL ou SUPABASE_ANON_KEY não estão configuradas no Vercel. Verifique em Settings > Environment Variables.',
-    });
+async function searchSupabase() {
+  if (!supabase) {
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [], unidadesSaude: [], emergenciasSaude: [], campanhasSaude: [] }
   }
 
   try {
-    const { messages } = req.body;
+    const [eventos, empresas, anuncios, comunicados, noticias, unidadesSaude, emergenciasSaude, campanhasSaude] = await Promise.all([
+      supabase
+        .from('eventos')
+        .select('*')
+        .gte('data_hora_inicio', new Date().toISOString())
+        .order('data_hora_inicio')
+        .limit(5),
+      
+      supabase
+        .from('empresas')
+        .select('*')
+        .limit(20),
+      
+      supabase
+        .from('anuncios')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      
+      supabase
+        .from('comunicados_prefeitura')
+        .select('*')
+        .order('data_publicacao', { ascending: false })
+        .limit(5),
+      
+      supabase
+        .from('noticias')
+        .select('*')
+        .order('data_publicacao', { ascending: false })
+        .limit(5),
 
+      supabase
+        .from('saude_unidades')
+        .select('*'),
+
+      supabase
+        .from('saude_emergencias')
+        .select('*'),
+
+      supabase
+        .from('saude_campanhas')
+        .select('*'),
+    ])
+
+    return {
+      eventos: eventos.data || [],
+      empresas: empresas.data || [],
+      anuncios: anuncios.data || [],
+      comunicados: comunicados.data || [],
+      noticias: noticias.data || [],
+      unidadesSaude: unidadesSaude.data || [],
+      emergenciasSaude: emergenciasSaude.data || [],
+      campanhasSaude: campanhasSaude.data || [],
+    }
+  } catch (error) {
+    console.error('Erro ao buscar dados do Supabase:', error)
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [], unidadesSaude: [], emergenciasSaude: [], campanhasSaude: [] }
+  }
+}
+
+// ============================================
+// HANDLER DA ROTA
+// ============================================
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    const body = await request.json() as RequestBody
+    const { messages } = body
+    
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({ error: 'Mensagens não fornecidas' });
+      return new Response(JSON.stringify({ error: 'Mensagens inválidas' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
-    const userMessage = messages[messages.length - 1].content;
+    const userMessage = messages[messages.length - 1].content
+    console.log('📩 Pergunta recebida:', userMessage)
 
-    // Busca o contexto atualizado no Supabase (com credenciais passadas como parâmetro)
-    const dadosContexto = await searchSupabase(supabaseUrl, supabaseAnonKey);
+    // Busca dados no Supabase
+    const dadosContexto = await searchSupabase()
 
-    // Formata dados de saúde para o prompt
-    const textoUnidades = dadosContexto.unidadesSaude.length > 0
-      ? dadosContexto.unidadesSaude.map((u) => {
-          let servicosStr = 'Atendimento Geral';
-          if (Array.isArray(u.servicos)) {
-            servicosStr = u.servicos.join(', ');
-          } else if (typeof u.servicos === 'string' && u.servicos) {
-            servicosStr = u.servicos.replace(/[{}"']/g, '').trim();
-          }
-          return `• ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
-        }).join('\n')
-      : 'Nenhuma unidade cadastrada no momento.';
+    // Formatação segura dos dados de saúde
+    const textoSaude = dadosContexto.unidadesSaude.map((u: any) => {
+      let servicosStr = 'Atendimento Geral'
+      if (Array.isArray(u.servicos)) {
+        servicosStr = u.servicos.join(', ')
+      } else if (typeof u.servicos === 'string') {
+        servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ')
+      }
+      return `• Unidade: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`
+    }).join('\n') || 'Nenhuma unidade cadastrada'
 
-    const textoEmergencias = dadosContexto.emergenciasSaude.length > 0
-      ? dadosContexto.emergenciasSaude.map((e) => 
-          `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
-        ).join('\n')
-      : 'Contatos padrão: Polícia 190, SAMU 192, Bombeiros 193.';
+    const textoEmergencias = dadosContexto.emergenciasSaude.map((e: any) => 
+      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
+    ).join('\n') || 'Bombeiros 193, Polícia 190, SAMU 192'
 
-    const textoCampanhas = dadosContexto.campanhasSaude.length > 0
-      ? dadosContexto.campanhasSaude.map((c) => 
-          `• ${c.titulo} | Período: ${c.periodo} | Público-alvo: ${c.publico_alvo}`
-        ).join('\n')
-      : 'Nenhuma campanha ativa no momento.';
+    const textoCampanhas = dadosContexto.campanhasSaude.map((c: any) => 
+      `• ${c.titulo} | Período: ${c.periodo}`
+    ).join('\n') || 'Nenhuma campanha ativa'
 
-    const textoDicas = dadosContexto.dicasSaude.length > 0
-      ? dadosContexto.dicasSaude.map((d) => `• ${d.orientacao}`).join('\n')
-      : 'Nenhuma dica disponível no momento.';
+    if (!aiClient) {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Desculpe, a IA (Grok/xAI) não está configurada no servidor (falta XAI_API_KEY).' 
+        }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
+    }
 
-    // Prepara o Prompt para São Brás do Suaçuí
-    const promptSistema = `
-Você é o assistente virtual do projeto "Meu Suaçuí", especializado na cidade de São Brás do Suaçuí, Minas Gerais.
+    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
-Aqui estão os dados atualizados da cidade para embasar suas respostas:
+    const systemPrompt = `
+VOCÊ É O ASSISTENTE OFICIAL DE SÃO BRÁS DO SUAÇUÍ. SUA MAIOR PRIORIDADE É RESPONDER SOBRE SAÚDE, HOSPITAIS E UNIDADES PÚBLICAS.
+Hoje é ${dataHoje}.
 
+DADOS OFICIAIS DE SAÚDE (USE ESTAS INFORMAÇÕES OBRIGATORIAMENTE):
 🏥 UNIDADES DE SAÚDE:
-${textoUnidades}
+${textoSaude}
 
 🚨 EMERGÊNCIAS:
 ${textoEmergencias}
 
-💉 CAMPANHAS DE SAÚDE:
+💉 CAMPANHAS:
 ${textoCampanhas}
 
-💡 DICAS DE SAÚDE:
-${textoDicas}
-
 EVENTOS:
-${dadosContexto.eventos.map(e => `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}`).join('\n') || 'Nenhum evento cadastrado'}
+${dadosContexto.eventos.map((e: any) => `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}`).join('\n') || 'Nenhum evento cadastrado'}
 
 EMPRESAS E SERVIÇOS:
-${dadosContexto.empresas.map(e => `• ${e.nome} - ${e.categoria} - ${e.endereco || 'Endereço não informado'}`).join('\n') || 'Nenhuma empresa cadastrada'}
+${dadosContexto.empresas.map((e: any) => `• ${e.nome} - ${e.categoria} - ${e.endereco || 'Endereço não informado'}`).join('\n') || 'Nenhuma empresa cadastrada'}
 
 ANÚNCIOS:
-${dadosContexto.anuncios.map(a => `• ${a.titulo} - ${a.categoria} - ${a.preco ? 'R$ ' + a.preco : 'Sob consulta'}`).join('\n') || 'Nenhum anúncio disponível'}
+${dadosContexto.anuncios.map((a: any) => `• ${a.titulo} - ${a.categoria} - ${a.preco ? 'R$ ' + a.preco : 'Sob consulta'}`).join('\n') || 'Nenhum anúncio disponível'}
 
 COMUNICADOS DA PREFEITURA:
-${dadosContexto.comunicados.map(c => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente'}
+${dadosContexto.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente'}
 
 NOTÍCIAS:
-${dadosContexto.noticias.map(n => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
+${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
-INSTRUÇÕES IMPORTANTES:
-1. Se o usuário perguntar sobre saúde, hospitais, postos de saúde, vacinas, emergências ou campanhas de vacinação, responda OBRIGATORIAMENTE com os dados de saúde acima.
-2. Se a informação solicitada não estiver na base cadastrada, informe educadamente que ainda não foi registrada no aplicativo.
-3. Responda de forma cortês, objetiva e útil sobre São Brás do Suaçuí com base nos dados fornecidos.
-    `;
+INSTRUÇÕES CRÍTICAS:
+1. Se o usuário perguntar sobre o "Hospital Municipal", você DEVE responder que ele fica na Rua Dr. Lima, 300 — Centro, funcionando 24 horas, conforme os dados de saúde acima.
+2. Nunca diga que não encontrou informações sobre saúde se o dado estiver listado nas "UNIDADES DE SAÚDE" acima.
+3. Seja objetivo, educado e use **negrito** nos endereços, nomes de unidades e horários.
+`
 
-    // Requisita a API do Groq usando Llama 3 / Mixtral (Extremamente rápido)
-    const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [
-          { role: 'system', content: promptSistema },
-          { role: 'user', content: userMessage }
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
+    console.log('🤖 Gerando resposta com o Grok (xAI)...');
+
+    const completion = await aiClient.chat.completions.create({
+      model: 'grok-2-latest',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.5,
+      max_tokens: 600,
+    })
+
+    const resposta = completion.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
+    
+    console.log('✅ Resposta gerada com sucesso')
+
+    return new Response(JSON.stringify({ message: resposta }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
+
+  } catch (error) {
+    console.error('❌ Erro no chat:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Erro ao processar sua pergunta',
+        details: error instanceof Error ? error.message : 'Erro desconhecido'
       }),
-    });
-
-    const data = await groqResponse.json();
-
-    if (!groqResponse.ok) {
-      console.error('Erro na API do Groq:', data);
-      return res.status(groqResponse.status).json({ error: data.error?.message || 'Erro na API de IA' });
-    }
-
-    const replyText = data.choices[0]?.message?.content || 'Não foi possível gerar uma resposta.';
-
-    return res.status(200).json({ message: replyText });
-
-  } catch (error: any) {
-    console.error('Erro na Vercel Function:', error);
-    return res.status(500).json({ error: error.message || 'Erro interno ao processar requisição' });
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
   }
+}
+
+export async function GET(): Promise<Response> {
+  return new Response(
+    JSON.stringify({
+      status: 'OK',
+      message: 'API de chat do São Brás do Suaçuí (Grok)',
+      timestamp: new Date().toISOString(),
+    }),
+    {
+      headers: { 'Content-Type': 'application/json' },
+    }
+  )
 }
