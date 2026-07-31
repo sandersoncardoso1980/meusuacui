@@ -80,7 +80,7 @@ function getSupabaseClient(env: any) {
   const key = env?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''; 
 
   if(!url || !key) {
-    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas!');
+    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas nas variáveis de ambiente!');
     return null;
   }
 
@@ -97,7 +97,64 @@ function getSupabaseClient(env: any) {
 }
 
 // ============================================
-// HANDLER DE FUNCTION CALLING / TRADUÇÃO SQL
+// BUSCA DINÂMICA NO SUPABASE (BLINDADA E SEGURA)
+// ============================================
+
+async function buscarInformacoesSupabase(env: any) {
+  const supabaseClient = getSupabaseClient(env);
+  if (!supabaseClient) {
+    console.error('❌ ERRO: Cliente Supabase não inicializado.');
+    return null;
+  }
+
+  try {
+    const eventosPromise = supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10);
+    const empresasPromise = supabaseClient.from('empresas').select('*').limit(20);
+    const anunciosPromise = supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20);
+    const comunicadosPromise = supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(5);
+    const noticiasPromise = supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(5);
+    const unidadesPromise = supabaseClient.from('saude_unidades').select('*');
+    const emergenciasPromise = supabaseClient.from('saude_emergencias').select('*');
+    const campanhasPromise = supabaseClient.from('saude_campanhas').select('*');
+
+    const [
+      eventosRes,
+      empresasRes,
+      anunciosRes,
+      comunicadosRes,
+      noticiasRes,
+      unidadesRes,
+      emergenciasRes,
+      campanhasRes
+    ] = await Promise.all([
+      eventosPromise,
+      empresasPromise,
+      anunciosPromise,
+      comunicadosPromise,
+      noticiasPromise,
+      unidadesPromise,
+      emergenciasPromise,
+      campanhasPromise
+    ]);
+
+    return {
+      eventos: eventosRes.data ?? [],
+      empresas: empresasRes.data ?? [],
+      anuncios: anunciosRes.data ?? [],
+      comunicados: comunicadosRes.data ?? [],
+      noticias: noticiasRes.data ?? [],
+      unidadesSaude: unidadesRes.data ?? [],
+      emergenciasSaude: emergenciasRes.data ?? [],
+      campanhasSaude: campanhasRes.data ?? []
+    };
+  } catch (error) {
+    console.error('❌ Erro crítico ao buscar dados do Supabase:', error);
+    return null;
+  }
+}
+
+// ============================================
+// HANDLER DO CHAT COM IA
 // ============================================
 
 async function handleChat(request: Request, env: any) {
@@ -108,130 +165,130 @@ async function handleChat(request: Request, env: any) {
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return new Response(
         JSON.stringify({ error: 'Mensagens inválidas' }),
-        { status: { status: 400 }, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
     const aiClient = createAiClient(env);
     const apiKey = getApiKey(env) || '';
-    const supabaseClient = getSupabaseClient(env);
 
-    if (!aiClient || !apiKey || !supabaseClient) {
+    if (!aiClient || !apiKey) {
       return new Response(
-        JSON.stringify({ message: 'Erro de configuração no servidor (IA ou Supabase ausentes).' }),
+        JSON.stringify({ 
+          message: 'Desculpe, a IA não está configurada no servidor (falta GROQ_API_KEY / XAI_API_KEY).' 
+        }),
         { headers: { 'Content-Type': 'application/json' } }
       );
     }
 
-    const userMessage = messages[messages.length - 1].content;
+    const dados = await buscarInformacoesSupabase(env);
 
-    // Ferramentas (Tools) que dizem ao LLM quais tabelas ele pode consultar
-    const tools = [
-      {
-        type: "function",
-        function: {
-          name: "consultar_banco_dados",
-          description: "Consulta tabelas oficiais da prefeitura de São Brás do Suaçuí para buscar informações de saúde, emergências, comércios, eventos ou notícias.",
-          parameters: {
-            type: "object",
-            properties: {
-              tabela: {
-                type: "string",
-                enum: [
-                  "saude_unidades", 
-                  "saude_emergencias", 
-                  "saude_campanhas", 
-                  "empresas", 
-                  "anuncios", 
-                  "eventos", 
-                  "comunicados_prefeitura", 
-                  "noticias"
-                ],
-                description: "A tabela específica a ser consultada com base na pergunta do usuário."
-              },
-              termo_busca: {
-                type: "string",
-                description: "Palavra-chave opcional para filtrar os dados (ex: 'vigilância', 'hospital', 'jardinagem'). Deixe vazio se quiser listar todos."
+    // Formatação rigorosa dos dados de saúde
+    const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
+      ? dados.unidadesSaude.map((u: any) => {
+          let servicosStr = 'Não especificado';
+          
+          if (Array.isArray(u.servicos)) {
+            servicosStr = u.servicos.join(', ');
+          } else if (typeof u.servicos === 'string') {
+            try {
+              const parsed = JSON.parse(u.servicos);
+              if (Array.isArray(parsed)) {
+                servicosStr = parsed.join(', ');
+              } else {
+                servicosStr = u.servicos;
               }
-            },
-            required: ["tabela"]
+            } catch {
+              servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
+            }
           }
-        }
-      }
-    ];
+
+          return `• Unidade: ${u.nome} | Endereço: ${u.endereco || 'Não informado'} | Horário: ${u.horario || 'Não informado'} | Serviços Oferecidos: ${servicosStr}`;
+        }).join('\n')
+      : 'Nenhuma unidade de saúde cadastrada no momento.';
+
+    const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
+      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
+    ).join('\n') || 'Nenhum contato de emergência cadastrado.';
+
+    const textoCampanhas = dados?.campanhasSaude.map((c: any) => 
+      `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`
+    ).join('\n') || 'Nenhuma campanha de saúde ativa no momento.';
+
+    const textoEmpresas = dados?.empresas.map((e: any) => {
+      return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}`;
+    }).join('\n') || 'Nenhuma empresa cadastrada.';
+
+    const textoAnuncios = dados?.anuncios.map((a: any) => {
+      const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
+      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Valor: ${preco} | Descrição: ${a.descricao || 'Sem descrição'}`;
+    }).join('\n') || 'Nenhum anúncio recente.';
+
+    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // SYSTEM PROMPT RESTRITIVO ANTIALUCINAÇÃO
+    const systemPrompt = `
+Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo da cidade de São Brás do Suaçuí, Minas Gerais.
+Hoje é ${dataHoje}.
+
+⚠️ REGRA ABSOLUTA E INEGOCIÁVEL:
+Você DEVE responder às perguntas utilizando **APENAS E EXCLUSIVAMENTE** os dados oficiais fornecidos abaixo extraídos do banco de dados da cidade. 
+- **PROIBIDO ABSOLUTAMENTE** usar conhecimento prévio da internet, inventar nomes de ruas, criar estabelecimentos, farmácias, campanhas de vacinação ou serviços que NÃO constem explicitamente nos textos abaixo.
+- Se a informação solicitada pelo usuário não estiver presente nas listas abaixo, responda estritamente: "Desculpe, essa informação ainda não está cadastrada no banco de dados oficial do aplicativo."
+
+---
+
+📊 DADOS OFICIAIS DO BANCO DE DADOS:
+
+🏥 SAÚDE - UNIDADES E SERVIÇOS:
+${textoSaude}
+
+🚨 SAÚDE - EMERGÊNCIAS:
+${textoEmergencias}
+
+💉 SAÚDE - CAMPANHAS:
+${textoCampanhas}
+
+🏢 COMÉRCIO E EMPRESAS:
+${textoEmpresas}
+
+🛍️ CLASSIFICADOS E ANÚNCIOS:
+${textoAnuncios}
+
+📅 EVENTOS:
+${dados?.eventos.map((e: any) => `• ${e.titulo} em ${e.local || 'São Brás'} - Início: ${new Date(e.data_hora_inicio).toLocaleString('pt-BR')}`).join('\n') || 'Nenhum evento agendado.'}
+
+📢 COMUNICADOS DA PREFEITURA:
+${dados?.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente.'}
+
+📰 NOTÍCIAS:
+${dados?.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo || ''}`).join('\n') || 'Nenhuma notícia no momento.'}
+
+---
+INSTRUÇÕES DE COMPORTAMENTO:
+1. Seja cortês, claro e use formatação em **negrito** para destacar nomes de unidades, endereços e horários.
+2. Ao responder sobre serviços de saúde, liste estritamente o que consta na seção "SAÚDE - UNIDADES E SERVIÇOS" correspondente à unidade consultada, sem adicionar itens externos.
+`;
 
     const isGroq = apiKey.startsWith('gsk_');
     const modelName = isGroq ? 'llama-3.3-70b-versatile' : 'grok-2-latest';
 
-    // 1. O LLM analisa a pergunta e decide qual função/tabela chamar
     const response = await aiClient.chat.completions.create({
       model: modelName,
       messages: [
-        { 
-          role: 'system', 
-          content: 'Você é um assistente de banco de dados de São Brás do Suaçuí. Use a ferramenta "consultar_banco_dados" para traduzir a pergunta do usuário na tabela correta do Supabase. Nunca invente dados.' 
-        },
+        { role: 'system', content: systemPrompt },
         ...messages
       ],
-      tools: tools,
-      tool_choice: "auto",
-      temperature: 0.0,
+      temperature: 0.1, // Temperatura reduzida para focar em precisão absoluta e eliminar criatividade/alucinação
+      max_tokens: 600,
     });
 
-    const responseMessage = response.choices[0]?.message;
-
-    // Se o LLM decidiu chamar uma função do banco de dados
-    if (responseMessage?.tool_calls && responseMessage.tool_calls.length > 0) {
-      const toolCall = responseMessage.tool_calls[0];
-      const args = JSON.parse(toolCall.function.arguments);
-      
-      console.log(`🔍 Function Calling acionado -> Tabela: ${args.tabela}, Termo: ${args.termo_busca || 'Nenhum'}`);
-
-      // Executa a query exata no Supabase
-      let query = supabaseClient.from(args.tabela).select('*');
-      
-      if (args.termo_busca && args.termo_busca.trim() !== '') {
-        // Tenta filtrar por nome ou título de forma inteligente
-        query = query.or(`nome.ilike.%${args.termo_busca}%,titulo.ilike.%${args.termo_busca}%,descricao.ilike.%${args.termo_busca}%`);
-      }
-
-      const { data, error } = await query.limit(10);
-
-      if (error) {
-        console.error('❌ Erro na query do Supabase:', error);
-        return new Response(JSON.stringify({ message: 'Erro ao consultar o banco de dados.' }), { headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // Se nenhum registro foi encontrado na tabela
-      if (!data || data.length === 0) {
-        return new Response(JSON.stringify({ message: 'Desculpe, não encontrei registros correspondentes no banco de dados oficial de São Brás do Suaçuí.' }), { headers: { 'Content-Type': 'application/json' } });
-      }
-
-      // 2. Passamos os dados brutos encontrados para o LLM apenas formatar a resposta para o cidadão
-      const formatPrompt = `
-Com base exclusivamente nestes dados brutos obtidos diretamente da tabela "${args.tabela}" do banco de dados oficial, responda à pergunta do cidadão de forma clara, educada e destacando em negrito os telefones, horários e nomes.
-
-DADOS OBTIDOS:
-${JSON.stringify(data, null, 2)}
-`;
-
-      const finalResponse = await aiClient.chat.completions.create({
-        model: modelName,
-        messages: [
-          { role: 'system', content: formatPrompt },
-          ...messages
-        ],
-        temperature: 0.1,
-      });
-
-      const respostaFinal = finalResponse.choices[0]?.message?.content || 'Dados encontrados, mas houve um erro ao formatar.';
-      
-      return new Response(JSON.stringify({ message: respostaFinal }), { headers: { 'Content-Type': 'application/json' } });
-    }
-
-    // Caso o LLM responda diretamente sem precisar de tabela (ex: conversas casuais tipo "Olá")
-    const respostaSimples = responseMessage?.content || 'Olá! Como posso ajudar você hoje em São Brás do Suaçuí?';
-    return new Response(JSON.stringify({ message: respostaSimples }), { headers: { 'Content-Type': 'application/json' } });
+    const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
+    
+    return new Response(
+      JSON.stringify({ message: resposta }),
+      { headers: { 'Content-Type': 'application/json' } }
+    );
 
   } catch (error) {
     console.error('❌ Erro no handleChat:', error);
