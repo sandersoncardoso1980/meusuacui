@@ -1,5 +1,5 @@
 // src/routes/api/chat.ts
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 
 // ============================================
@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 // ============================================
 
 interface Message {
-  role: 'user' | 'assistant'
+  role: 'user' | 'assistant' | 'system'
   content: string
 }
 
@@ -19,9 +19,13 @@ interface RequestBody {
 // CONFIGURAÇÕES
 // ============================================
 
-// Inicializa Gemini
-const genAI = process.env.GEMINI_API_KEY 
-  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+// Inicializa o cliente da xAI (Grok) usando o SDK compatível com OpenAI
+const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY
+const aiClient = apiKey
+  ? new OpenAI({
+      apiKey,
+      baseURL: 'https://api.x.ai/v1',
+    })
   : null
 
 // Inicializa Supabase
@@ -33,7 +37,7 @@ const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
 // FUNÇÕES AUXILIARES
 // ============================================
 
-async function searchSupabase(query: string) {
+async function searchSupabase() {
   if (!supabase) {
     return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [], unidadesSaude: [], emergenciasSaude: [], campanhasSaude: [] }
   }
@@ -70,7 +74,6 @@ async function searchSupabase(query: string) {
         .order('data_publicacao', { ascending: false })
         .limit(5),
 
-      // 👇 ADICIONADAS AS TABELAS DE SAÚDE AQUI
       supabase
         .from('saude_unidades')
         .select('*'),
@@ -119,8 +122,8 @@ export async function POST(request: Request): Promise<Response> {
     const userMessage = messages[messages.length - 1].content
     console.log('📩 Pergunta recebida:', userMessage)
 
-    // Busca dados no Supabase (já incluindo saúde)
-    const dadosContexto = await searchSupabase(userMessage)
+    // Busca dados no Supabase
+    const dadosContexto = await searchSupabase()
 
     // Formatação segura dos dados de saúde
     const textoSaude = dadosContexto.unidadesSaude.map((u: any) => {
@@ -141,39 +144,24 @@ export async function POST(request: Request): Promise<Response> {
       `• ${c.titulo} | Período: ${c.periodo}`
     ).join('\n') || 'Nenhuma campanha ativa'
 
-    // Se não tiver Gemini, retorna resposta estruturada
-    if (!genAI) {
-      let resposta = '📌 **Informações sobre São Brás do Suaçuí**\n\n'
-      resposta += `Sua pergunta: "${userMessage}"\n\n`
-      
-      if (dadosContexto.unidadesSaude.length > 0) {
-        resposta += '🏥 **Unidades de Saúde:**\n'
-        dadosContexto.unidadesSaude.forEach((u: any) => {
-          resposta += `• ${u.nome} - ${u.endereco} (${u.horario})\n`
-        })
-        resposta += '\n'
-      }
-
-      if (dadosContexto.emergenciasSaude.length > 0) {
-        resposta += '🚨 **Emergências:**\n'
-        dadosContexto.emergenciasSaude.forEach((e: any) => {
-          resposta += `• ${e.nome}: ${e.telefone}\n`
-        })
-        resposta += '\n'
-      }
-      
-      resposta += '\n💡 **Dica:** Configure a chave GEMINI_API_KEY no arquivo .env!'
-      
-      return new Response(JSON.stringify({ message: resposta }), {
-        headers: { 'Content-Type': 'application/json' },
-      })
+    // Se não tiver o cliente de IA configurado
+    if (!aiClient) {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Desculpe, a IA (Grok/xAI) não está configurada no servidor (falta XAI_API_KEY).' 
+        }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
-    // Prepara o contexto completo para o Gemini
-    const contexto = `
-Você é um assistente virtual especializado em informações sobre a cidade de São Brás do Suaçuí, Minas Gerais.
+    // Prepara o System Prompt com o contexto da cidade
+    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
-Aqui estão os dados atualizados da cidade:
+    const systemPrompt = `
+Você é o assistente virtual oficial do projeto "Meu Suaçuí", focado exclusivamente na cidade de São Brás do Suaçuí, Minas Gerais.
+Hoje é ${dataHoje}.
+
+Responda às dúvidas dos cidadãos e visitantes baseando-se RIGOROSAMENTE nos dados oficiais do banco de dados abaixo:
 
 🏥 SAÚDE - UNIDADES E POSTOS:
 ${textoSaude}
@@ -199,29 +187,30 @@ ${dadosContexto.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).jo
 NOTÍCIAS:
 ${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
-console.log('🚨 AQUIVO SENDO EXECUTADO AGORA - TIMESTAMP:', new Date().toISOString());
+INSTRUÇÕES DE COMPORTAMENTO:
+1. Responda de forma cortês, objetiva e útil.
+2. Use **negrito** para destacar informações importantes (como endereços, horários e telefones).
+3. Se a informação solicitada não estiver na base cadastrada acima, informe educadamente que o dado ainda não foi registrado no aplicativo.
+`
 
-Pergunta do usuário: ${userMessage}
+    console.log('🤖 Gerando resposta com o Grok (xAI)...');
 
-Responda de forma amigável e útil sobre São Brás do Suaçuí usando os dados fornecidos acima. Use **negrito** para destacar informações importantes (como endereços e telefones). Seja específico e dê respostas completas e detalhadas.
-    `
-
-    // Chama o Gemini
-    const model = genAI.getGenerativeModel({ 
-      model: "gemini-1.5-flash",
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 600,
-      },
+    // Chama a API do Grok
+    const completion = await aiClient.chat.completions.create({
+      model: 'grok-2-latest',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.5,
+      max_tokens: 600,
     })
 
-    const result = await model.generateContent(contexto)
-    const response = await result.response
-    const text = response.text()
-
-    console.log('✅ Resposta gerada com sucesso')
+    const resposta = completion.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
     
-    return new Response(JSON.stringify({ message: text }), {
+    console.log('✅ Resposta gerada com sucesso')
+
+    return new Response(JSON.stringify({ message: resposta }), {
       headers: { 'Content-Type': 'application/json' },
     })
 
@@ -240,12 +229,12 @@ Responda de forma amigável e útil sobre São Brás do Suaçuí usando os dados
   }
 }
 
-// GET para teste (opcional)
+// GET para teste
 export async function GET(): Promise<Response> {
   return new Response(
     JSON.stringify({
       status: 'OK',
-      message: 'API de chat do São Brás do Suaçuí',
+      message: 'API de chat do São Brás do Suaçuí (Grok)',
       timestamp: new Date().toISOString(),
     }),
     {
