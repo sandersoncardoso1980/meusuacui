@@ -1,3 +1,4 @@
+// src/routes/saude.tsx
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { AppLayout } from "@/components/AppLayout";
@@ -16,7 +17,7 @@ import {
 export const Route = createFileRoute("/saude")({
   head: () => ({
     meta: [
-      { title: "Saúde — Entre Rios IA" },
+      { title: "Saúde — Entre Rios de Minas" },
       {
         name: "description",
         content:
@@ -74,9 +75,18 @@ function Saude() {
     ? dicas.map((d: any) => d.orientacao) 
     : DICAS_PADRAO;
 
+  // Função auxiliar para tratar serviços em array ou string vinda do Supabase
+  const getServicosArray = (servicos: any): string[] => {
+    if (Array.isArray(servicos)) return servicos;
+    if (typeof servicos === 'string') {
+      return servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').map(s => s.trim()).filter(Boolean);
+    }
+    return ['Atendimento Geral'];
+  };
+
   return (
     <AppLayout>
-      <header className="animate-reveal">
+      <header className="animate-reveal mb-6">
         <p className="text-xs font-bold uppercase tracking-[0.2em] text-muted-foreground mb-2">
           — Saúde pública
         </p>
@@ -89,7 +99,7 @@ function Saude() {
       </header>
 
       {/* Emergências */}
-      <section className="animate-reveal">
+      <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
           <Ambulance className="size-5 text-red-500" /> Telefones de emergência
         </h2>
@@ -113,55 +123,68 @@ function Saude() {
       </section>
 
       {/* Unidades do Supabase */}
-      <section className="animate-reveal">
+      <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
           <Stethoscope className="size-5 text-emerald-600" /> Unidades de saúde
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {unidades.map((u: any) => (
-            <article key={u.id || u.nome} className="bg-card rounded-xl ring-1 ring-black/5 p-5">
-              <h3 className="font-bold text-lg">{u.nome}</h3>
-              <p className="text-sm text-muted-foreground mt-2 flex items-start gap-2">
-                <MapPin className="size-4 shrink-0 mt-0.5 text-emerald-600" /> {u.endereco}
-              </p>
-              <p className="text-sm text-muted-foreground mt-1 flex items-start gap-2">
-                <Clock className="size-4 shrink-0 mt-0.5 text-emerald-600" /> {u.horario}
-              </p>
-              <div className="flex flex-wrap gap-1.5 mt-4">
-                {(Array.isArray(u.servicos) ? u.servicos : []).map((s: string) => (
-                  <span
-                    key={s}
-                    className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700"
-                  >
-                    {s}
-                  </span>
-                ))}
-              </div>
-            </article>
-          ))}
+          {unidades.map((u: any) => {
+            const servicosList = getServicosArray(u.servicos);
+            return (
+              <article key={u.id || u.nome} className="bg-card rounded-xl ring-1 ring-black/5 p-5 flex flex-col justify-between">
+                <div>
+                  <h3 className="font-bold text-lg">{u.nome}</h3>
+                  {u.endereco && (
+                    <p className="text-sm text-muted-foreground mt-2 flex items-start gap-2">
+                      <MapPin className="size-4 shrink-0 mt-0.5 text-emerald-600" /> {u.endereco}
+                    </p>
+                  )}
+                  {u.horario && (
+                    <p className="text-sm text-muted-foreground mt-1 flex items-start gap-2">
+                      <Clock className="size-4 shrink-0 mt-0.5 text-emerald-600" /> {u.horario}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5 mt-4">
+                  {servicosList.map((s: string) => (
+                    <span
+                      key={s}
+                      className="text-[11px] font-semibold px-2 py-1 rounded-full bg-emerald-50 text-emerald-700"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              </article>
+            );
+          })}
         </div>
       </section>
 
       {/* Campanhas do Supabase */}
-      <section className="animate-reveal">
+      <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
           <Syringe className="size-5 text-emerald-600" /> Campanhas e vacinação
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {campanhas.map((c: any) => (
             <article key={c.id || c.titulo} className="bg-card rounded-xl ring-1 ring-black/5 p-5">
-              <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
-                {c.periodo}
-              </span>
+              {c.periodo && (
+                <span className="text-[10px] font-bold text-primary uppercase tracking-wider">
+                  {c.periodo}
+                </span>
+              )}
               <h3 className="font-bold mt-1">{c.titulo}</h3>
-              <p className="text-sm text-muted-foreground mt-2">{c.publico_alvo}</p>
+              {c.publico_alvo && (
+                <p className="text-sm text-muted-foreground mt-2">{c.publico_alvo}</p>
+              )}
             </article>
           ))}
         </div>
       </section>
 
       {/* Dicas do Supabase */}
-      <section className="animate-reveal">
+      <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
           <ShieldCheck className="size-5 text-emerald-600" /> Orientações de prevenção
         </h2>
