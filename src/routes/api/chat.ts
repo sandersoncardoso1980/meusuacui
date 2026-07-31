@@ -182,7 +182,17 @@ async function handleChat(request: Request, env: any) {
     const textoUltimaMensagem = typeof ultimaMensagemObj?.content === 'string' ? ultimaMensagemObj.content : '';
 
     // Executa a busca inteligente focada na dúvida do usuário
-    const { contexto } = await buscarDadosContextuais(env, textoUltimaMensagem);
+    const resultado = await buscarDadosContextuais(env, textoUltimaMensagem);
+
+console.log("====================================");
+console.log("PERGUNTA:", textoUltimaMensagem);
+console.log("CONTEXTO:");
+console.log(resultado.contexto);
+console.log("DADOS:");
+console.log(JSON.stringify(resultado.dadosBrutos, null, 2));
+console.log("====================================");
+
+const { contexto } = resultado;
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
