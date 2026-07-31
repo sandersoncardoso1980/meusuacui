@@ -1,219 +1,233 @@
-import "./lib/error-capture";
-import { consumeLastCapturedError } from "./lib/error-capture";
-import { renderErrorPage } from "./lib/error-page";
-import OpenAI from 'openai';
-import { createClient } from '@supabase/supabase-js';
-import "dotenv/config";
+// src/routes/api/chat.ts
+import OpenAI from 'openai'
+import { createClient } from '@supabase/supabase-js'
 
-type ServerEntry = {
-  fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
-};
+// ============================================
+// TIPOS
+// ============================================
 
-let serverEntryPromise: Promise<ServerEntry> | undefined;
+interface Message {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
 
-async function getServerEntry(): Promise<ServerEntry> {
-  if (!serverEntryPromise) {
-    serverEntryPromise = import("@tanstack/react-start/server-entry").then(
-      (m) => (m.default ?? m) as ServerEntry,
-    );
+interface RequestBody {
+  messages: Message[]
+}
+
+// ============================================
+// BASE DE CONHECIMENTO ESTÁTICA (SAÚDE E UTILIDADE)
+// ============================================
+
+const DADOS_SAUDE_DOCUMENTO = `
+# GUIA OFICIAL DE SAÚDE E EMERGÊNCIAS - SÃO BRÁS DO SUAÇUÍ
+
+## 🚨 1. TELEFONES DE EMERGÊNCIA E ÓRGÃOS ÚTEIS
+- **SAMU**: 192 (Atendimento de urgência e emergência médica)
+- **Bombeiros**: 193 (Resgate, salvamento e combate a incêndios)
+- **Polícia Militar**: 190 (Segurança pública)
+- **Vigilância Sanitária**: (31) 3571-1234 (Fiscalização sanitária, denúncias e orientações)
+- **Hospital Municipal**: (31) 3571-1000 (Atendimento hospitalar de urgência e internação)
+
+## 🏥 2. UNIDADES BÁSICAS DE SAÚDE (UBS)
+- **Unidade Básica de Saúde (UBS) Central**
+  - **Endereço**: Praça da Matriz, s/n - Centro
+  - **Horário de Funcionamento**: Segunda a Sexta-feira, das 07h às 17h
+  - **Serviços Oferecidos**: Clínico Geral, Vacinação, Curativos, Farmácia Básica e Enfermagem.
+- **Nova UBS Bairro São José**
+  - **Endereço**: Rua das Flores, 120 - Bairro São José
+  - **Horário de Funcionamento**: Segunda a Sexta-feira, das 07h às 16h
+  - **Serviços Oferecidos**: Pediatria, Clínico Geral, Prevenção, Vacinação e Consultas de Rotina.
+
+## 💉 3. CAMPANHAS DE SAÚDE ATIVAS
+- **Campanha de Vacinação contra a Gripe (Influenza)**: Período de abril a maio. Foco em idosos, crianças e grupos prioritários.
+- **Prevenção à Dengue (Zero Água Parada)**: Ações contínuas durante todo o ano nos bairros do município.
+
+## 🛡️ 4. ORIENTAÇÕES GERAIS E PRECAUÇÕES
+- Elimine qualquer foco de água parada em vasos, calhas e recipientes para evitar a proliferação do mosquito da dengue.
+- Ao procurar atendimento médico nas unidades de saúde, leve sempre um documento de identificação com foto e o Cartão do SUS atualizado.
+- Em casos de emergência grave ou risco de vida, ligue imediatamente para o SAMU (192) ou Bombeiros (193).
+`
+
+// ============================================
+// CONFIGURAÇÕES
+// ============================================
+
+const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY
+const aiClient = apiKey
+  ? new OpenAI({
+      apiKey,
+      baseURL: 'https://api.x.ai/v1',
+    })
+  : null
+
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
+  : null
+
+// ============================================
+// FUNÇÕES AUXILIARES
+// ============================================
+
+async function searchSupabase() {
+  if (!supabase) {
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [] }
   }
-  return serverEntryPromise;
-}
-
-// ============================================
-// DADOS DE SAÚDE FIXOS (GARANTIA TOTAL DE ACESSO)
-// ============================================
-
-const DADOS_SAUDE_FIXOS = {
-  emergencias: [
-    { nome: "SAMU", telefone: "192", descricao: "Urgência e Emergência Médica" },
-    { nome: "Bombeiros", telefone: "193", descricao: "Resgate e Combate a Incêndios" },
-    { nome: "Polícia Militar", telefone: "190", descricao: "Segurança Pública" },
-    { nome: "Vigilância Sanitária", telefone: "(31) 3571-1234", descricao: "Fiscalização e Orientações Sanitárias" },
-    { nome: "Hospital Municipal", telefone: "(31) 3571-1000", descricao: "Atendimento Hospitalar Geral" }
-  ],
-  unidades: [
-    { nome: "Unidade Básica de Saúde (UBS) Central", endereco: "Praça da Matriz, s/n - Centro", horario: "Segunda a Sexta, das 07h às 17h", servicos: ["Clínico Geral", "Vacinação", "Curativos", "Farmácia Básica"] },
-    { nome: "Nova UBS Bairro São José", endereco: "Rua das Flores, 120 - Bairro São José", horario: "Segunda a Sexta, das 07h às 16h", servicos: ["Pediatria", "Clínico Geral", "Prevenção e Vacinação"] }
-  ],
-  campanhas: [
-    { titulo: "Campanha de Vacinação contra a Gripe (Influenza)", periodo: "Abril a Maio", publico: "Idosos, crianças e grupos prioritários" },
-    { titulo: "Prevenção à Dengue: Zero Água Parada", periodo: "Contínuo (Todo o ano)", publico: "Toda a população" }
-  ],
-  dicas: [
-    "Elimine água parada em vasos, calhas e pneus para evitar o mosquito da dengue.",
-    "Leve documento com foto e cartão SUS ao procurar uma unidade de saúde.",
-    "Em caso de emergência grave, ligue 192 antes de se deslocar.",
-    "Mantenha a caderneta de vacinação em dia — sua e das crianças."
-  ]
-};
-
-// ============================================
-// AUXILIARES E CONFIGURAÇÃO
-// ============================================
-
-function getApiKey(env: any): string | null {
-  return (
-    env?.GROQ_API_KEY ||
-    env?.XAI_API_KEY ||
-    process.env.GROQ_API_KEY ||
-    process.env.XAI_API_KEY ||
-    null
-  );
-}
-
-function createAiClient(env: any): OpenAI | null {
-  const apiKey = getApiKey(env);
-  if (!apiKey) return null;
-
-  const isGroq = apiKey.startsWith('gsk_');
-  const baseURL = isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1';
-
-  return new OpenAI({ apiKey, baseURL });
-}
-
-function getSupabaseClient(env: any) {
-  const url = env?.SUPABASE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
-  const key = env?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''; 
-
-  if (!url || !key) return null;
-
-  return createClient(url, key, {
-    auth: { persistSession: false },
-    global: {
-      fetch: fetch,
-      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
-    }
-  });
-}
-
-// ============================================
-// BUSCA PARCIAL DE OUTROS DADOS (OPCIONAL)
-// ============================================
-
-async function buscarOutrosDados(env: any) {
-  const supabaseClient = getSupabaseClient(env);
-  if (!supabaseClient) return { empresas: [], anuncios: [], eventos: [], comunicados: [], noticias: [] };
 
   try {
-    const [empresasRes, anunciosRes, eventosRes, comunicadosRes, noticiasRes] = await Promise.all([
-      supabaseClient.from('empresas').select('*').limit(15),
-      supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(10),
-      supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).limit(5),
-      supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(3),
-      supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(3)
-    ]);
+    const [eventos, empresas, anuncios, comunicados, noticias] = await Promise.all([
+      supabase
+        .from('eventos')
+        .select('*')
+        .gte('data_hora_inicio', new Date().toISOString())
+        .order('data_hora_inicio')
+        .limit(5),
+      
+      supabase
+        .from('empresas')
+        .select('*')
+        .limit(20),
+      
+      supabase
+        .from('anuncios')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(20),
+      
+      supabase
+        .from('comunicados_prefeitura')
+        .select('*')
+        .order('data_publicacao', { ascending: false })
+        .limit(5),
+      
+      supabase
+        .from('noticias')
+        .select('*')
+        .order('data_publicacao', { ascending: false })
+        .limit(5),
+    ])
 
     return {
-      empresas: empresasRes.data ?? [],
-      anuncios: anunciosRes.data ?? [],
-      eventos: eventosRes.data ?? [],
-      comunicados: comunicadosRes.data ?? [],
-      noticias: noticiasRes.data ?? []
-    };
-  } catch {
-    return { empresas: [], anuncios: [], eventos: [], comunicados: [], noticias: [] };
+      eventos: eventos.data || [],
+      empresas: empresas.data || [],
+      anuncios: anuncios.data || [],
+      comunicados: comunicados.data || [],
+      noticias: noticias.data || [],
+    }
+  } catch (error) {
+    console.error('Erro ao buscar dados do Supabase:', error)
+    return { eventos: [], empresas: [], anuncios: [], comunicados: [], noticias: [] }
   }
 }
 
 // ============================================
-// HANDLER DO CHAT
+// HANDLER DA ROTA
 // ============================================
 
-async function handleChat(request: Request, env: any) {
+export async function POST(request: Request): Promise<Response> {
   try {
-    const body = await request.json();
-    const { messages } = body;
+    const body = await request.json() as RequestBody
+    const { messages } = body
     
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return new Response(JSON.stringify({ error: 'Mensagens inválidas' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ error: 'Mensagens inválidas' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
 
-    const aiClient = createAiClient(env);
-    const apiKey = getApiKey(env) || '';
+    const userMessage = messages[messages.length - 1].content
+    console.log('📩 Pergunta recebida:', userMessage)
 
-    if (!aiClient || !apiKey) {
-      return new Response(JSON.stringify({ message: 'IA não configurada no servidor.' }), { headers: { 'Content-Type': 'application/json' } });
+    // Busca dados complementares no Supabase (comércio, anúncios, eventos, etc.)
+    const dadosContexto = await searchSupabase()
+
+    if (!aiClient) {
+      return new Response(
+        JSON.stringify({ 
+          message: 'Desculpe, a IA (Grok/xAI) não está configurada no servidor (falta XAI_API_KEY).' 
+        }),
+        { headers: { 'Content-Type': 'application/json' } }
+      )
     }
 
-    const outrosDados = await buscarOutrosDados(env);
-
-    // Formata os dados fixos de saúde para texto do prompt
-    const textoEmergencias = DADOS_SAUDE_FIXOS.emergencias.map(e => `• ${e.nome}: ${e.telefone} (${e.descricao})`).join('\n');
-    const textoUnidades = DADOS_SAUDE_FIXOS.unidades.map(u => `• Unidade: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${u.servicos.join(', ')}`).join('\n');
-    const textoCampanhas = DADOS_SAUDE_FIXOS.campanhas.map(c => `• ${c.titulo} | Período: ${c.periodo} | Público: ${c.publico}`).join('\n');
-    const textoDicas = DADOS_SAUDE_FIXOS.dicas.map(d => `• ${d}`).join('\n');
-
-    const textoEmpresas = outrosDados.empresas.map((e: any) => `• ${e.nome} (${e.categoria}) | Tel: ${e.contato || 'N/A'}`).join('\n') || 'Nenhuma empresa cadastrada.';
-    const textoAnuncios = outrosDados.anuncios.map((a: any) => `• [CLASSIFICADO] ${a.titulo} | R$ ${a.preco || 'A combinar'}`).join('\n') || 'Nenhum anúncio recente.';
-
-    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
     const systemPrompt = `
-Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo de São Brás do Suaçuí, MG.
+VOCÊ É O ASSISTENTE OFICIAL DE SÃO BRÁS DO SUAÇUÍ. SUA MAIOR PRIORIDADE É RESPONDER SOBRE SAÚDE, HOSPITAIS, VIGILÂNCIA SANITÁRIA E UNIDADES PÚBLICAS.
 Hoje é ${dataHoje}.
 
-⚠️ REGRA ABSOLUTA:
-Responda utilizando **APENAS E EXCLUSIVAMENTE** os dados oficiais fornecidos abaixo. Não invente telefones ou endereços.
-
+---
+📄 DOCUMENTAÇÃO OFICIAL DE SAÚDE (USE ESTAS INFORMAÇÕES OBRIGATORIAMENTE PARA QUALQUER PERGUNTA MÉDICA OU DE UTILIDADE PÚBLICA):
+${DADOS_SAUDE_DOCUMENTO}
 ---
 
-📊 DADOS OFICIAIS DE SAÚDE:
+OUTROS DADOS MUNICIPAIS (SUPABASE):
+EVENTOS:
+${dadosContexto.eventos.map((e: any) => `• ${e.titulo} - ${new Date(e.data_hora_inicio).toLocaleDateString('pt-BR')} em ${e.local}`).join('\n') || 'Nenhum evento cadastrado'}
 
-🚨 EMERGÊNCIAS E ÚTEIS:
-${textoEmergencias}
+EMPRESAS E SERVIÇOS:
+${dadosContexto.empresas.map((e: any) => `• ${e.nome} - ${e.categoria} - ${e.endereco || 'Endereço não informado'}`).join('\n') || 'Nenhuma empresa cadastrada'}
 
-🏥 UNIDADES DE SAÚDE:
-${textoUnidades}
+ANÚNCIOS:
+${dadosContexto.anuncios.map((a: any) => `• ${a.titulo} - ${a.categoria} - ${a.preco ? 'R$ ' + a.preco : 'Sob consulta'}`).join('\n') || 'Nenhum anúncio disponível'}
 
-💉 CAMPANHAS:
-${textoCampanhas}
+COMUNICADOS DA PREFEITURA:
+${dadosContexto.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente'}
 
-🛡️ ORIENTAÇÕES:
-${textoDicas}
+NOTÍCIAS:
+${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
-🏢 COMÉRCIO E EMPRESAS:
-${textoEmpresas}
+INSTRUÇÕES CRÍTICAS:
+1. Se o usuário perguntar sobre o telefone da Vigilância Sanitária, hospitais, SAMU ou unidades de saúde, você DEVE consultar estritamente o bloco "DOCUMENTAÇÃO OFICIAL DE SAÚDE" acima.
+2. Nunca diga que não encontrou informações sobre saúde se o dado estiver listado no documento oficial de saúde.
+3. Seja objetivo, educado e use **negrito** nos telefones, endereços, nomes de unidades e horários.
+`
 
-🛍️ ANÚNCIOS:
-${textoAnuncios}
-`;
+    console.log('🤖 Gerando resposta com o Grok (xAI)...');
 
-    const isGroq = apiKey.startsWith('gsk_');
-    const modelName = isGroq ? 'llama-3.3-70b-versatile' : 'grok-2-latest';
+    const completion = await aiClient.chat.completions.create({
+      model: 'grok-2-latest',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.3,
+      max_tokens: 600,
+    })
 
-    const response = await aiClient.chat.completions.create({
-      model: modelName,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
-      temperature: 0.1,
-      max_tokens: 500,
-    });
+    const resposta = completion.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
+    
+    console.log('✅ Resposta gerada com sucesso')
 
-    const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui obter resposta.';
-    return new Response(JSON.stringify({ message: resposta }), { headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ message: resposta }), {
+      headers: { 'Content-Type': 'application/json' },
+    })
 
   } catch (error) {
-    console.error('❌ Erro no handleChat:', error);
-    return new Response(JSON.stringify({ error: 'Erro ao processar', details: error instanceof Error ? error.message : '' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    console.error('❌ Erro no chat:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: 'Erro ao processar sua pergunta',
+        details: error instanceof Error ? error.message : 'Erro desconhecido'
+      }),
+      {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    )
   }
 }
 
-// ============================================
-// SERVIDOR
-// ============================================
-
-export default {
-  async fetch(request: Request, env: any, ctx: unknown) {
-    const url = new URL(request.url);
-    if (url.pathname === '/api/chat' && request.method === 'POST') {
-      return handleChat(request, env);
+export async function GET(): Promise<Response> {
+  return new Response(
+    JSON.stringify({
+      status: 'OK',
+      message: 'API de chat do São Brás do Suaçuí (Grok)',
+      timestamp: new Date().toISOString(),
+    }),
+    {
+      headers: { 'Content-Type': 'application/json' },
     }
-    try {
-      const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
-    } catch {
-      return new Response(renderErrorPage(), { status: 500, headers: { "content-type": "text/html; charset=utf-8" } });
-    }
-  },
-};
+  )
+}
