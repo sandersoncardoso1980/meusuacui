@@ -137,12 +137,6 @@ async function buscarInformacoesSupabase(env: any) {
       campanhasPromise
     ]);
 
-    if (unidadesRes.error) {
-      console.error('❌ Erro ao buscar saude_unidades:', unidadesRes.error);
-    } else {
-      console.log('✅ Unidades de saúde carregadas com sucesso:', unidadesRes.data);
-    }
-
     return {
       eventos: eventosRes.data ?? [],
       empresas: empresasRes.data ?? [],
@@ -164,8 +158,6 @@ async function buscarInformacoesSupabase(env: any) {
 // ============================================
 
 async function handleChat(request: Request, env: any) {
-  console.log('📩 Chat handler iniciado');
-  
   try {
     const body = await request.json();
     const { messages } = body;
@@ -183,8 +175,7 @@ async function handleChat(request: Request, env: any) {
     if (!aiClient || !apiKey) {
       return new Response(
         JSON.stringify({ 
-          message: 'Desculpe, a IA não está configurada no servidor (falta GROQ_API_KEY / XAI_API_KEY).',
-          warning: 'Configure as variáveis de ambiente.'
+          message: 'Desculpe, a IA não está configurada no servidor (falta GROQ_API_KEY / XAI_API_KEY).' 
         }),
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -192,9 +183,10 @@ async function handleChat(request: Request, env: any) {
 
     const dados = await buscarInformacoesSupabase(env);
 
+    // Formatação rigorosa dos dados de saúde
     const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
       ? dados.unidadesSaude.map((u: any) => {
-          let servicosStr = 'Atendimento Geral';
+          let servicosStr = 'Não especificado';
           
           if (Array.isArray(u.servicos)) {
             servicosStr = u.servicos.join(', ');
@@ -211,74 +203,75 @@ async function handleChat(request: Request, env: any) {
             }
           }
 
-          return `• Nome: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`;
+          return `• Unidade: ${u.nome} | Endereço: ${u.endereco || 'Não informado'} | Horário: ${u.horario || 'Não informado'} | Serviços Oferecidos: ${servicosStr}`;
         }).join('\n')
-      : 'Nenhuma unidade cadastrada no momento.';
+      : 'Nenhuma unidade de saúde cadastrada no momento.';
 
     const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
       `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
-    ).join('\n') || 'Contatos padrão: Polícia 190, SAMU 192, Bombeiros 193.';
+    ).join('\n') || 'Nenhum contato de emergência cadastrado.';
 
     const textoCampanhas = dados?.campanhasSaude.map((c: any) => 
-      `• ${c.titulo} | Período: ${c.periodo} | Público: ${c.publico_alvo}`
-    ).join('\n') || 'Nenhuma campanha cadastrada.';
+      `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`
+    ).join('\n') || 'Nenhuma campanha de saúde ativa no momento.';
 
     const textoEmpresas = dados?.empresas.map((e: any) => {
-      const promo = e.promocao_ativa ? ` [PROMOÇÃO: ${e.descricao_promocao}]` : '';
-      return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}${promo}`;
+      return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}`;
     }).join('\n') || 'Nenhuma empresa cadastrada.';
 
     const textoAnuncios = dados?.anuncios.map((a: any) => {
       const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
-      const vendedor = a.nome_vendedor ? ` | Vendedor: ${a.nome_vendedor}` : '';
-      const contato = a.telefone_vendedor ? ` | Contato/Tel: ${a.telefone_vendedor}` : '';
-      const desc = a.descricao ? ` - Descrição: ${a.descricao}` : '';
-      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Negociação: ${a.tipo_negociacao} | Valor: ${preco}${vendedor}${contato}${desc}`;
-    }).join('\n') || 'Nenhum anúncio recente no momento.';
+      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Valor: ${preco} | Descrição: ${a.descricao || 'Sem descrição'}`;
+    }).join('\n') || 'Nenhum anúncio recente.';
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+    // SYSTEM PROMPT RESTRITIVO ANTIALUCINAÇÃO
     const systemPrompt = `
-Você é o assistente virtual do projeto "Meu Suaçuí", focado exclusivamente na cidade de São Brás do Suaçuí, Minas Gerais.
+Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo da cidade de São Brás do Suaçuí, Minas Gerais.
 Hoje é ${dataHoje}.
 
-Responda às dúvidas dos cidadãos e visitantes baseando-se RIGOROSAMENTE nos dados oficiais do banco de dados abaixo:
+⚠️ REGRA ABSOLUTA E INEGOCIÁVEL:
+Você DEVE responder às perguntas utilizando **APENAS E EXCLUSIVAMENTE** os dados oficiais fornecidos abaixo extraídos do banco de dados da cidade. 
+- **PROIBIDO ABSOLUTAMENTE** usar conhecimento prévio da internet, inventar nomes de ruas, criar estabelecimentos, farmácias, campanhas de vacinação ou serviços que NÃO constem explicitamente nos textos abaixo.
+- Se a informação solicitada pelo usuário não estiver presente nas listas abaixo, responda estritamente: "Desculpe, essa informação ainda não está cadastrada no banco de dados oficial do aplicativo."
 
-🛍️ CLASSIFICADOS E ANÚNCIOS DA COMUNIDADE:
-${textoAnuncios}
+---
 
-🏢 COMÉRCIO E EMPRESAS LOCAIS:
-${textoEmpresas}
+📊 DADOS OFICIAIS DO BANCO DE DADOS:
 
-🏥 SAÚDE - UNIDADES E POSTOS:
+🏥 SAÚDE - UNIDADES E SERVIÇOS:
 ${textoSaude}
 
-🚨 SAÚDE - EMERGÊNCIAS E TELEFONES:
+🚨 SAÚDE - EMERGÊNCIAS:
 ${textoEmergencias}
 
-💉 SAÚDE - CAMPANHAS E VACINAÇÃO:
+💉 SAÚDE - CAMPANHAS:
 ${textoCampanhas}
 
-📅 EVENTOS AGENDADOS:
+🏢 COMÉRCIO E EMPRESAS:
+${textoEmpresas}
+
+🛍️ CLASSIFICADOS E ANÚNCIOS:
+${textoAnuncios}
+
+📅 EVENTOS:
 ${dados?.eventos.map((e: any) => `• ${e.titulo} em ${e.local || 'São Brás'} - Início: ${new Date(e.data_hora_inicio).toLocaleString('pt-BR')}`).join('\n') || 'Nenhum evento agendado.'}
 
 📢 COMUNICADOS DA PREFEITURA:
 ${dados?.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente.'}
 
-📰 NOTÍCIAS DA CIDADE:
+📰 NOTÍCIAS:
 ${dados?.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo || ''}`).join('\n') || 'Nenhuma notícia no momento.'}
 
+---
 INSTRUÇÕES DE COMPORTAMENTO:
-1. Responda de forma cortês, objetiva e útil.
-2. IMPORTANTE: Se o usuário perguntar por compras, produtos (ex: sofá, móveis, carros) ou itens à venda, VERIFIQUE TANTO A LISTA DE EMPRESAS QUANTO A LISTA DE CLASSIFICADOS E ANÚNCIOS acima.
-3. Se o usuário perguntar horários ou se algo está aberto hoje, compare com os horários informados nas listas e considere a data de hoje.
-4. Se a informação solicitada não estiver na base cadastrada acima, informe educadamente que o dado ainda não foi registrado no aplicativo.
+1. Seja cortês, claro e use formatação em **negrito** para destacar nomes de unidades, endereços e horários.
+2. Ao responder sobre serviços de saúde, liste estritamente o que consta na seção "SAÚDE - UNIDADES E SERVIÇOS" correspondente à unidade consultada, sem adicionar itens externos.
 `;
 
     const isGroq = apiKey.startsWith('gsk_');
     const modelName = isGroq ? 'llama-3.3-70b-versatile' : 'grok-2-latest';
-
-    console.log(`🤖 Gerando resposta com ${isGroq ? 'Groq' : 'xAI'}...`);
 
     const response = await aiClient.chat.completions.create({
       model: modelName,
@@ -286,7 +279,7 @@ INSTRUÇÕES DE COMPORTAMENTO:
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      temperature: 0.5,
+      temperature: 0.1, // Temperatura reduzida para focar em precisão absoluta e eliminar criatividade/alucinação
       max_tokens: 600,
     });
 
