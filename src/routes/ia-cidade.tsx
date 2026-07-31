@@ -209,7 +209,7 @@ function IACidade() {
         </div>
         
         <p className="text-xs text-center text-muted-foreground mt-4">
-          IA alimentada por Google Gemini • Dados atualizados de São Brás do Suaçuí
+         IA alimentada por Grok (xAI) • Dados atualizados de São Brás do Suaçuí
         </p>
       </div>
     </AppLayout>
