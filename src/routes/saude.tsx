@@ -17,23 +17,16 @@ import {
 export const Route = createFileRoute("/saude")({
   head: () => ({
     meta: [
-      { title: "Saúde — Entre Rios de Minas" },
+      { title: "Saúde — São Brás do Suaçuí" },
       {
         name: "description",
         content:
-          "Unidades de saúde, campanhas de vacinação, telefones de emergência e orientações de saúde pública em Entre Rios de Minas.",
+          "Unidades de saúde, campanhas de vacinação, telefones de emergência e orientações de saúde pública em São Brás do Suaçuí.",
       },
     ],
   }),
   component: Saude,
 });
-
-const EMERGENCIAS = [
-  { nome: "SAMU", tel: "192", desc: "Urgência e emergência móvel" },
-  { nome: "Bombeiros", tel: "193", desc: "Resgate e incêndios" },
-  { nome: "Polícia Militar", tel: "190", desc: "Segurança pública" },
-  { nome: "Vigilância Sanitária", tel: "(31) 3755-0000", desc: "Denúncias e fiscalização" },
-];
 
 const DICAS_PADRAO = [
   "Elimine água parada em vasos, calhas e pneus para evitar o mosquito da dengue.",
@@ -43,7 +36,16 @@ const DICAS_PADRAO = [
 ];
 
 function Saude() {
-  // Query 1: Unidades de Saúde
+  // Query 1: Emergências do Supabase
+  const { data: emergencias = [] } = useQuery({
+    queryKey: ["saude-emergencias"],
+    queryFn: async () => {
+      const { data } = await (supabase as any).from("saude_emergencias").select("*");
+      return data ?? [];
+    },
+  });
+
+  // Query 2: Unidades de Saúde
   const { data: unidades = [] } = useQuery({
     queryKey: ["saude-unidades"],
     queryFn: async () => {
@@ -52,7 +54,7 @@ function Saude() {
     },
   });
 
-  // Query 2: Campanhas de Saúde
+  // Query 3: Campanhas de Saúde
   const { data: campanhas = [] } = useQuery({
     queryKey: ["saude-campanhas"],
     queryFn: async () => {
@@ -61,7 +63,7 @@ function Saude() {
     },
   });
 
-  // Query 3: Dicas / Orientações de Saúde
+  // Query 4: Dicas / Orientações de Saúde
   const { data: dicas = [] } = useQuery({
     queryKey: ["saude-dicas"],
     queryFn: async () => {
@@ -70,12 +72,10 @@ function Saude() {
     },
   });
 
-  // Lista final de dicas (se houver no banco, usa do banco; senão, usa o padrão)
   const listaDicas = dicas.length > 0 
     ? dicas.map((d: any) => d.orientacao) 
     : DICAS_PADRAO;
 
-  // Função auxiliar para tratar serviços em array ou string vinda do Supabase
   const getServicosArray = (servicos: any): string[] => {
     if (Array.isArray(servicos)) return servicos;
     if (typeof servicos === 'string') {
@@ -94,28 +94,28 @@ function Saude() {
           <HeartPulse className="size-7 text-emerald-600" /> Saúde
         </h1>
         <p className="text-sm text-muted-foreground mt-2">
-          Unidades, campanhas, emergências e orientações da rede pública de Entre Rios de Minas.
+          Unidades, campanhas, emergências e orientações da rede pública de São Brás do Suaçuí.
         </p>
       </header>
 
-      {/* Emergências */}
+      {/* Emergências do Supabase */}
       <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
-          <Ambulance className="size-5 text-red-500" /> Telefones de emergência
+          <Ambulance className="size-5 text-red-500" /> Telefones de emergência e úteis
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {EMERGENCIAS.map((e) => (
+          {emergencias.map((e: any) => (
             <a
-              key={e.nome}
-              href={`tel:${e.tel.replace(/\D/g, "")}`}
+              key={e.id || e.nome}
+              href={`tel:${e.telefone?.replace(/\D/g, "")}`}
               className="bg-card rounded-xl ring-1 ring-black/5 p-4 hover:ring-emerald-500/40 transition"
             >
               <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 {e.nome}
               </p>
-              <p className="text-2xl font-black font-mono text-emerald-700 mt-1">{e.tel}</p>
+              <p className="text-2xl font-black font-mono text-emerald-700 mt-1">{e.telefone}</p>
               <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                <Phone className="size-3" /> {e.desc}
+                <Phone className="size-3 shrink-0" /> {e.descricao || 'Contato de emergência'}
               </p>
             </a>
           ))}
@@ -183,7 +183,7 @@ function Saude() {
         </div>
       </section>
 
-      {/* Dicas do Supabase */}
+      {/* Dicas */}
       <section className="animate-reveal mb-8">
         <h2 className="text-lg font-bold flex items-center gap-2 mb-3">
           <ShieldCheck className="size-5 text-emerald-600" /> Orientações de prevenção
