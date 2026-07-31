@@ -207,9 +207,11 @@ async function handleChat(request: Request, env: any) {
         }).join('\n')
       : 'Nenhuma unidade de saúde cadastrada no momento.';
 
-    const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
-      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
-    ).join('\n') || 'Nenhum contato de emergência cadastrado.';
+    const textoEmergencias = Array.isArray(dados?.emergenciasSaude) && dados.emergenciasSaude.length > 0
+      ? dados.emergenciasSaude.map((e: any) => 
+          `• Órgão/Serviço: ${e.nome || 'Não informado'} | Telefone/Contato: ${e.telefone || 'Não informado'} | Descrição: ${e.descricao || 'Sem descrição'}`
+        ).join('\n')
+      : 'Nenhum contato de emergência cadastrado.';
 
     const textoCampanhas = dados?.campanhasSaude.map((c: any) => 
       `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`
