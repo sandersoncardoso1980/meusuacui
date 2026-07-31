@@ -1,6 +1,7 @@
 // src/routes/api/chat.ts
 import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
+import DADOS_SAUDE_DOCUMENTO from '../../assets/saude_sao_bras_do_suacui?raw'
 
 // ============================================
 // TIPOS
@@ -14,40 +15,6 @@ interface Message {
 interface RequestBody {
   messages: Message[]
 }
-
-// ============================================
-// BASE DE CONHECIMENTO ESTÁTICA (SAÚDE E UTILIDADE)
-// ============================================
-
-const DADOS_SAUDE_DOCUMENTO = `
-# GUIA OFICIAL DE SAÚDE E EMERGÊNCIAS - SÃO BRÁS DO SUAÇUÍ
-
-## 🚨 1. TELEFONES DE EMERGÊNCIA E ÓRGÃOS ÚTEIS
-- **SAMU**: 192 (Atendimento de urgência e emergência médica)
-- **Bombeiros**: 193 (Resgate, salvamento e combate a incêndios)
-- **Polícia Militar**: 190 (Segurança pública)
-- **Vigilância Sanitária**: (31) 3571-1234 (Fiscalização sanitária, denúncias e orientações)
-- **Hospital Municipal**: (31) 3571-1000 (Atendimento hospitalar de urgência e internação)
-
-## 🏥 2. UNIDADES BÁSICAS DE SAÚDE (UBS)
-- **Unidade Básica de Saúde (UBS) Central**
-  - **Endereço**: Praça da Matriz, s/n - Centro
-  - **Horário de Funcionamento**: Segunda a Sexta-feira, das 07h às 17h
-  - **Serviços Oferecidos**: Clínico Geral, Vacinação, Curativos, Farmácia Básica e Enfermagem.
-- **Nova UBS Bairro São José**
-  - **Endereço**: Rua das Flores, 120 - Bairro São José
-  - **Horário de Funcionamento**: Segunda a Sexta-feira, das 07h às 16h
-  - **Serviços Oferecidos**: Pediatria, Clínico Geral, Prevenção, Vacinação e Consultas de Rotina.
-
-## 💉 3. CAMPANHAS DE SAÚDE ATIVAS
-- **Campanha de Vacinação contra a Gripe (Influenza)**: Período de abril a maio. Foco em idosos, crianças e grupos prioritários.
-- **Prevenção à Dengue (Zero Água Parada)**: Ações contínuas durante todo o ano nos bairros do município.
-
-## 🛡️ 4. ORIENTAÇÕES GERAIS E PRECAUÇÕES
-- Elimine qualquer foco de água parada em vasos, calhas e recipientes para evitar a proliferação do mosquito da dengue.
-- Ao procurar atendimento médico nas unidades de saúde, leve sempre um documento de identificação com foto e o Cartão do SUS atualizado.
-- Em casos de emergência grave ou risco de vida, ligue imediatamente para o SAMU (192) ou Bombeiros (193).
-`
 
 // ============================================
 // CONFIGURAÇÕES
