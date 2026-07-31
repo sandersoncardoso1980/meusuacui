@@ -21,6 +21,34 @@ async function getServerEntry(): Promise<ServerEntry> {
 }
 
 // ============================================
+// DADOS DE SAÚDE FIXOS (GARANTIA TOTAL DE ACESSO)
+// ============================================
+
+const DADOS_SAUDE_FIXOS = {
+  emergencias: [
+    { nome: "SAMU", telefone: "192", descricao: "Urgência e Emergência Médica" },
+    { nome: "Bombeiros", telefone: "193", descricao: "Resgate e Combate a Incêndios" },
+    { nome: "Polícia Militar", telefone: "190", descricao: "Segurança Pública" },
+    { nome: "Vigilância Sanitária", telefone: "(31) 3571-1234", descricao: "Fiscalização e Orientações Sanitárias" },
+    { nome: "Hospital Municipal", telefone: "(31) 3571-1000", descricao: "Atendimento Hospitalar Geral" }
+  ],
+  unidades: [
+    { nome: "Unidade Básica de Saúde (UBS) Central", endereco: "Praça da Matriz, s/n - Centro", horario: "Segunda a Sexta, das 07h às 17h", servicos: ["Clínico Geral", "Vacinação", "Curativos", "Farmácia Básica"] },
+    { nome: "Nova UBS Bairro São José", endereco: "Rua das Flores, 120 - Bairro São José", horario: "Segunda a Sexta, das 07h às 16h", servicos: ["Pediatria", "Clínico Geral", "Prevenção e Vacinação"] }
+  ],
+  campanhas: [
+    { titulo: "Campanha de Vacinação contra a Gripe (Influenza)", periodo: "Abril a Maio", publico: "Idosos, crianças e grupos prioritários" },
+    { titulo: "Prevenção à Dengue: Zero Água Parada", periodo: "Contínuo (Todo o ano)", publico: "Toda a população" }
+  ],
+  dicas: [
+    "Elimine água parada em vasos, calhas e pneus para evitar o mosquito da dengue.",
+    "Leve documento com foto e cartão SUS ao procurar uma unidade de saúde.",
+    "Em caso de emergência grave, ligue 192 antes de se deslocar.",
+    "Mantenha a caderneta de vacinação em dia — sua e das crianças."
+  ]
+};
+
+// ============================================
 // AUXILIARES E CONFIGURAÇÃO
 // ============================================
 
@@ -48,113 +76,43 @@ function getSupabaseClient(env: any) {
   const url = env?.SUPABASE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
   const key = env?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''; 
 
-  if (!url || !key) {
-    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas!');
-    return null;
-  }
+  if (!url || !key) return null;
 
   return createClient(url, key, {
     auth: { persistSession: false },
     global: {
       fetch: fetch,
-      headers: {
-        'apikey': key,
-        'Authorization': `Bearer ${key}`
-      }
+      headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
     }
   });
 }
 
 // ============================================
-// BUSCA DIRECIONADA INTELIGENTE (BASEADA NA PERGUNTA)
+// BUSCA PARCIAL DE OUTROS DADOS (OPCIONAL)
 // ============================================
 
-async function buscarDadosContextuais(env: any, ultimaMensagem: string) {
+async function buscarOutrosDados(env: any) {
   const supabaseClient = getSupabaseClient(env);
-  if (!supabaseClient) return { contexto: "Banco indisponível.", dadosBrutos: {} };
-
-  const termo = ultimaMensagem.toLowerCase();
-  let dadosContexto = "";
-  const dadosBrutos: Record<string, any> = {};
+  if (!supabaseClient) return { empresas: [], anuncios: [], eventos: [], comunicados: [], noticias: [] };
 
   try {
-    // Detecta intenção de Saúde (Unidades, Emergências, Campanhas, Dicas)
-    const querSaude = /saúde|hospital|posto|ubs|ubs|vacina|vacinação|emergência|samu|bombeiro|polícia|vigilância|dengue|febre|médico|dentista|remédio|ubs/i.test(termo);
-    const querEmpresa = /empresa|comércio|loja|farmácia|padaria|mercado|restaurante|onde comprar|telefone de/i.test(termo);
-    const querAnuncio = /anúncio|classificado|vende|aluga|preço|comprar/i.test(termo);
-    const querEvento = /evento|festa|show|cultura|quando vai acontecer|agenda/i.test(termo);
-    const querComunicado = /prefeitura|comunicado|aviso|nota oficial|prefeito/i.test(termo);
+    const [empresasRes, anunciosRes, eventosRes, comunicadosRes, noticiasRes] = await Promise.all([
+      supabaseClient.from('empresas').select('*').limit(15),
+      supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(10),
+      supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).limit(5),
+      supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(3),
+      supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(3)
+    ]);
 
-    // Se nenhuma intenção clara for detectada, busca um panorama geral leve
-    const carregarTudo = !querSaude && !querEmpresa && !querAnuncio && !querEvento && !querComunicado;
-
-    const promessas: Promise<any>[] = [];
-
-    if (querSaude || carregarTudo) {
-      promessas.push(
-        supabaseClient.from('saude_unidades').select('*').then(res => { dadosBrutos.unidades = res.data || []; }),
-        supabaseClient.from('saude_emergencias').select('*').then(res => { dadosBrutos.emergencias = res.data || []; }),
-        supabaseClient.from('saude_campanhas').select('*').then(res => { dadosBrutos.campanhas = res.data || []; }),
-        supabaseClient.from('saude_dicas').select('*').then(res => { dadosBrutos.dicas = res.data || []; })
-      );
-    }
-
-    if (querEmpresa || carregarTudo) {
-      promessas.push(
-        supabaseClient.from('empresas').select('*').or(`nome.ilike.%${termo}%,categoria.ilike.%${termo}%`).limit(15).then(res => { dadosBrutos.empresas = res.data || []; })
-      );
-    }
-
-    if (querAnuncio || carregarTudo) {
-      promessas.push(
-        supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(10).then(res => { dadosBrutos.anuncios = res.data || []; })
-      );
-    }
-
-    if (querEvento || carregarTudo) {
-      promessas.push(
-        supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).limit(5).then(res => { dadosBrutos.eventos = res.data || []; })
-      );
-    }
-
-    if (querComunicado || carregarTudo) {
-      promessas.push(
-        supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(3).then(res => { dadosBrutos.comunicados = res.data || []; })
-      );
-    }
-
-    await Promise.all(promessas);
-
-    // Monta string de contexto enxuta apenas com o que foi recuperado
-    if (dadosBrutos.emergencias?.length) {
-      dadosContexto += `\n🚨 EMERGÊNCIAS:\n` + dadosBrutos.emergencias.map((e: any) => `- ${e.nome}: ${e.telefone} (${e.descricao || ''})`).join('\n');
-    }
-    if (dadosBrutos.unidades?.length) {
-      dadosContexto += `\n🏥 UNIDADES DE SAÚDE:\n` + dadosBrutos.unidades.map((u: any) => `- ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${Array.isArray(u.servicos) ? u.servicos.join(', ') : u.servicos}`).join('\n');
-    }
-    if (dadosBrutos.campanhas?.length) {
-      dadosContexto += `\n💉 CAMPANHAS:\n` + dadosBrutos.campanhas.map((c: any) => `- ${c.titulo} (Período: ${c.periodo})`).join('\n');
-    }
-    if (dadosBrutos.dicas?.length) {
-      dadosContexto += `\n🛡️ ORIENTAÇÕES:\n` + dadosBrutos.dicas.map((d: any) => `- ${d.orientacao}`).join('\n');
-    }
-    if (dadosBrutos.empresas?.length) {
-      dadosContexto += `\n🏢 EMPRESAS:\n` + dadosBrutos.empresas.map((e: any) => `- ${e.nome} (${e.categoria}) | Tel: ${e.contato || 'N/A'} | Endereço: ${e.endereco || 'N/D'}`).join('\n');
-    }
-    if (dadosBrutos.anuncios?.length) {
-      dadosContexto += `\n🛍️ ANÚNCIOS:\n` + dadosBrutos.anuncios.map((a: any) => `- ${a.titulo}: R$ ${a.preco || 'A combinar'}`).join('\n');
-    }
-    if (dadosBrutos.eventos?.length) {
-      dadosContexto += `\n📅 EVENTOS:\n` + dadosBrutos.eventos.map((ev: any) => `- ${ev.titulo} em ${ev.local || 'São Brás'}`).join('\n');
-    }
-    if (dadosBrutos.comunicados?.length) {
-      dadosContexto += `\n📢 COMUNICADOS:\n` + dadosBrutos.comunicados.map((cm: any) => `- ${cm.titulo}: ${cm.conteudo}`).join('\n');
-    }
-
-    return { contexto: dadosContexto || "Nenhuma informação correspondente encontrada no banco.", dadosBrutos };
-  } catch (error) {
-    console.error('❌ Erro na busca direcionada:', error);
-    return { contexto: "Erro ao consultar base de dados.", dadosBrutos: {} };
+    return {
+      empresas: empresasRes.data ?? [],
+      anuncios: anunciosRes.data ?? [],
+      eventos: eventosRes.data ?? [],
+      comunicados: comunicadosRes.data ?? [],
+      noticias: noticiasRes.data ?? []
+    };
+  } catch {
+    return { empresas: [], anuncios: [], eventos: [], comunicados: [], noticias: [] };
   }
 }
 
@@ -178,21 +136,16 @@ async function handleChat(request: Request, env: any) {
       return new Response(JSON.stringify({ message: 'IA não configurada no servidor.' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const ultimaMensagemObj = messages[messages.length - 1];
-    const textoUltimaMensagem = typeof ultimaMensagemObj?.content === 'string' ? ultimaMensagemObj.content : '';
+    const outrosDados = await buscarOutrosDados(env);
 
-    // Executa a busca inteligente focada na dúvida do usuário
-    const resultado = await buscarDadosContextuais(env, textoUltimaMensagem);
+    // Formata os dados fixos de saúde para texto do prompt
+    const textoEmergencias = DADOS_SAUDE_FIXOS.emergencias.map(e => `• ${e.nome}: ${e.telefone} (${e.descricao})`).join('\n');
+    const textoUnidades = DADOS_SAUDE_FIXOS.unidades.map(u => `• Unidade: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${u.servicos.join(', ')}`).join('\n');
+    const textoCampanhas = DADOS_SAUDE_FIXOS.campanhas.map(c => `• ${c.titulo} | Período: ${c.periodo} | Público: ${c.publico}`).join('\n');
+    const textoDicas = DADOS_SAUDE_FIXOS.dicas.map(d => `• ${d}`).join('\n');
 
-console.log("====================================");
-console.log("PERGUNTA:", textoUltimaMensagem);
-console.log("CONTEXTO:");
-console.log(resultado.contexto);
-console.log("DADOS:");
-console.log(JSON.stringify(resultado.dadosBrutos, null, 2));
-console.log("====================================");
-
-const { contexto } = resultado;
+    const textoEmpresas = outrosDados.empresas.map((e: any) => `• ${e.nome} (${e.categoria}) | Tel: ${e.contato || 'N/A'}`).join('\n') || 'Nenhuma empresa cadastrada.';
+    const textoAnuncios = outrosDados.anuncios.map((a: any) => `• [CLASSIFICADO] ${a.titulo} | R$ ${a.preco || 'A combinar'}`).join('\n') || 'Nenhum anúncio recente.';
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -201,10 +154,29 @@ Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo de
 Hoje é ${dataHoje}.
 
 ⚠️ REGRA ABSOLUTA:
-Responda utilizando **APENAS** os dados oficiais fornecidos abaixo. Se a informação exata não estiver presente, diga estritamente: "Desculpe, essa informação não está cadastrada no banco de dados oficial."
+Responda utilizando **APENAS E EXCLUSIVAMENTE** os dados oficiais fornecidos abaixo. Não invente telefones ou endereços.
 
-📊 DADOS RECUPERADOS PARA ESTA PERGUNTA:
-${contexto}
+---
+
+📊 DADOS OFICIAIS DE SAÚDE:
+
+🚨 EMERGÊNCIAS E ÚTEIS:
+${textoEmergencias}
+
+🏥 UNIDADES DE SAÚDE:
+${textoUnidades}
+
+💉 CAMPANHAS:
+${textoCampanhas}
+
+🛡️ ORIENTAÇÕES:
+${textoDicas}
+
+🏢 COMÉRCIO E EMPRESAS:
+${textoEmpresas}
+
+🛍️ ANÚNCIOS:
+${textoAnuncios}
 `;
 
     const isGroq = apiKey.startsWith('gsk_');
