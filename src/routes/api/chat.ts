@@ -21,34 +21,6 @@ async function getServerEntry(): Promise<ServerEntry> {
 }
 
 // ============================================
-// TRATAMENTO DE ERROS SSR
-// ============================================
-
-async function normalizeCatastrophicSsrResponse(response: Response): Promise<Response> {
-  if (response.status < 500) return response;
-  const contentType = response.headers.get("content-type") ?? "";
-  if (!contentType.includes("application/json")) return response;
-
-  const body = await response.clone().text();
-  if (!isH3SwallowedErrorBody(body)) return response;
-
-  console.error(consumeLastCapturedError() ?? new Error(`h3 swallowed SSR error: ${body}`));
-  return new Response(renderErrorPage(), {
-    status: 500,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
-}
-
-function isH3SwallowedErrorBody(body: string): boolean {
-  try {
-    const payload = JSON.parse(body) as { unhandled?: unknown; message?: unknown };
-    return payload.unhandled === true && payload.message === "HTTPError";
-  } catch {
-    return false;
-  }
-}
-
-// ============================================
 // AUXILIARES E CONFIGURAÇÃO
 // ============================================
 
@@ -69,18 +41,15 @@ function createAiClient(env: any): OpenAI | null {
   const isGroq = apiKey.startsWith('gsk_');
   const baseURL = isGroq ? 'https://api.groq.com/openai/v1' : 'https://api.x.ai/v1';
 
-  return new OpenAI({
-    apiKey,
-    baseURL,
-  });
+  return new OpenAI({ apiKey, baseURL });
 }
 
 function getSupabaseClient(env: any) {
   const url = env?.SUPABASE_URL || process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://unquslsfksopfimzplyn.supabase.co';
   const key = env?.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || ''; 
 
-  if(!url || !key) {
-    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas nas variáveis de ambiente!');
+  if (!url || !key) {
+    console.error('❌ ERRO CRÍTICO: URL ou Chave do Supabase não encontradas!');
     return null;
   }
 
@@ -97,68 +66,100 @@ function getSupabaseClient(env: any) {
 }
 
 // ============================================
-// BUSCA DINÂMICA NO SUPABASE (BLINDADA E SEGURA)
+// BUSCA DIRECIONADA INTELIGENTE (BASEADA NA PERGUNTA)
 // ============================================
 
-async function buscarInformacoesSupabase(env: any) {
+async function buscarDadosContextuais(env: any, ultimaMensagem: string) {
   const supabaseClient = getSupabaseClient(env);
-  if (!supabaseClient) {
-    console.error('❌ ERRO: Cliente Supabase não inicializado.');
-    return null;
-  }
+  if (!supabaseClient) return { contexto: "Banco indisponível.", dadosBrutos: {} };
+
+  const termo = ultimaMensagem.toLowerCase();
+  let dadosContexto = "";
+  const dadosBrutos: Record<string, any> = {};
 
   try {
-    const eventosPromise = supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).order('data_hora_inicio', { ascending: true }).limit(10);
-    const empresasPromise = supabaseClient.from('empresas').select('*').limit(20);
-    const anunciosPromise = supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(20);
-    const comunicadosPromise = supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(5);
-    const noticiasPromise = supabaseClient.from('noticias').select('*').order('data_publicacao', { ascending: false }).limit(5);
-    const unidadesPromise = supabaseClient.from('saude_unidades').select('*');
-    const emergenciasPromise = supabaseClient.from('saude_emergencias').select('*');
-    const campanhasPromise = supabaseClient.from('saude_campanhas').select('*');
-    const dicasPromise = supabaseClient.from('saude_dicas').select('*');
+    // Detecta intenção de Saúde (Unidades, Emergências, Campanhas, Dicas)
+    const querSaude = /saúde|hospital|posto|ubs|ubs|vacina|vacinação|emergência|samu|bombeiro|polícia|vigilância|dengue|febre|médico|dentista|remédio|ubs/i.test(termo);
+    const querEmpresa = /empresa|comércio|loja|farmácia|padaria|mercado|restaurante|onde comprar|telefone de/i.test(termo);
+    const querAnuncio = /anúncio|classificado|vende|aluga|preço|comprar/i.test(termo);
+    const querEvento = /evento|festa|show|cultura|quando vai acontecer|agenda/i.test(termo);
+    const querComunicado = /prefeitura|comunicado|aviso|nota oficial|prefeito/i.test(termo);
 
-    const [
-      eventosRes,
-      empresasRes,
-      anunciosRes,
-      comunicadosRes,
-      noticiasRes,
-      unidadesRes,
-      emergenciasRes,
-      campanhasRes,
-      dicasRes
-    ] = await Promise.all([
-      eventosPromise,
-      empresasPromise,
-      anunciosPromise,
-      comunicadosPromise,
-      noticiasPromise,
-      unidadesPromise,
-      emergenciasPromise,
-      campanhasPromise,
-      dicasPromise
-    ]);
+    // Se nenhuma intenção clara for detectada, busca um panorama geral leve
+    const carregarTudo = !querSaude && !querEmpresa && !querAnuncio && !querEvento && !querComunicado;
 
-    return {
-      eventos: eventosRes.data ?? [],
-      empresas: empresasRes.data ?? [],
-      anuncios: anunciosRes.data ?? [],
-      comunicados: comunicadosRes.data ?? [],
-      noticias: noticiasRes.data ?? [],
-      unidadesSaude: unidadesRes.data ?? [],
-      emergenciasSaude: emergenciasRes.data ?? [],
-      campanhasSaude: campanhasRes.data ?? [],
-      dicasSaude: dicasRes.data ?? []
-    };
+    const promessas: Promise<any>[] = [];
+
+    if (querSaude || carregarTudo) {
+      promessas.push(
+        supabaseClient.from('saude_unidades').select('*').then(res => { dadosBrutos.unidades = res.data || []; }),
+        supabaseClient.from('saude_emergencias').select('*').then(res => { dadosBrutos.emergencias = res.data || []; }),
+        supabaseClient.from('saude_campanhas').select('*').then(res => { dadosBrutos.campanhas = res.data || []; }),
+        supabaseClient.from('saude_dicas').select('*').then(res => { dadosBrutos.dicas = res.data || []; })
+      );
+    }
+
+    if (querEmpresa || carregarTudo) {
+      promessas.push(
+        supabaseClient.from('empresas').select('*').or(`nome.ilike.%${termo}%,categoria.ilike.%${termo}%`).limit(15).then(res => { dadosBrutos.empresas = res.data || []; })
+      );
+    }
+
+    if (querAnuncio || carregarTudo) {
+      promessas.push(
+        supabaseClient.from('anuncios').select('*').order('created_at', { ascending: false }).limit(10).then(res => { dadosBrutos.anuncios = res.data || []; })
+      );
+    }
+
+    if (querEvento || carregarTudo) {
+      promessas.push(
+        supabaseClient.from('eventos').select('*').gte('data_hora_inicio', new Date().toISOString()).limit(5).then(res => { dadosBrutos.eventos = res.data || []; })
+      );
+    }
+
+    if (querComunicado || carregarTudo) {
+      promessas.push(
+        supabaseClient.from('comunicados_prefeitura').select('*').order('data_publicacao', { ascending: false }).limit(3).then(res => { dadosBrutos.comunicados = res.data || []; })
+      );
+    }
+
+    await Promise.all(promessas);
+
+    // Monta string de contexto enxuta apenas com o que foi recuperado
+    if (dadosBrutos.emergencias?.length) {
+      dadosContexto += `\n🚨 EMERGÊNCIAS:\n` + dadosBrutos.emergencias.map((e: any) => `- ${e.nome}: ${e.telefone} (${e.descricao || ''})`).join('\n');
+    }
+    if (dadosBrutos.unidades?.length) {
+      dadosContexto += `\n🏥 UNIDADES DE SAÚDE:\n` + dadosBrutos.unidades.map((u: any) => `- ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${Array.isArray(u.servicos) ? u.servicos.join(', ') : u.servicos}`).join('\n');
+    }
+    if (dadosBrutos.campanhas?.length) {
+      dadosContexto += `\n💉 CAMPANHAS:\n` + dadosBrutos.campanhas.map((c: any) => `- ${c.titulo} (Período: ${c.periodo})`).join('\n');
+    }
+    if (dadosBrutos.dicas?.length) {
+      dadosContexto += `\n🛡️ ORIENTAÇÕES:\n` + dadosBrutos.dicas.map((d: any) => `- ${d.orientacao}`).join('\n');
+    }
+    if (dadosBrutos.empresas?.length) {
+      dadosContexto += `\n🏢 EMPRESAS:\n` + dadosBrutos.empresas.map((e: any) => `- ${e.nome} (${e.categoria}) | Tel: ${e.contato || 'N/A'} | Endereço: ${e.endereco || 'N/D'}`).join('\n');
+    }
+    if (dadosBrutos.anuncios?.length) {
+      dadosContexto += `\n🛍️ ANÚNCIOS:\n` + dadosBrutos.anuncios.map((a: any) => `- ${a.titulo}: R$ ${a.preco || 'A combinar'}`).join('\n');
+    }
+    if (dadosBrutos.eventos?.length) {
+      dadosContexto += `\n📅 EVENTOS:\n` + dadosBrutos.eventos.map((ev: any) => `- ${ev.titulo} em ${ev.local || 'São Brás'}`).join('\n');
+    }
+    if (dadosBrutos.comunicados?.length) {
+      dadosContexto += `\n📢 COMUNICADOS:\n` + dadosBrutos.comunicados.map((cm: any) => `- ${cm.titulo}: ${cm.conteudo}`).join('\n');
+    }
+
+    return { contexto: dadosContexto || "Nenhuma informação correspondente encontrada no banco.", dadosBrutos };
   } catch (error) {
-    console.error('❌ Erro crítico ao buscar dados do Supabase:', error);
-    return null;
+    console.error('❌ Erro na busca direcionada:', error);
+    return { contexto: "Erro ao consultar base de dados.", dadosBrutos: {} };
   }
 }
 
 // ============================================
-// HANDLER DO CHAT COM IA
+// HANDLER DO CHAT
 // ============================================
 
 async function handleChat(request: Request, env: any) {
@@ -167,120 +168,33 @@ async function handleChat(request: Request, env: any) {
     const { messages } = body;
     
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Mensagens inválidas' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ error: 'Mensagens inválidas' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
 
     const aiClient = createAiClient(env);
     const apiKey = getApiKey(env) || '';
 
     if (!aiClient || !apiKey) {
-      return new Response(
-        JSON.stringify({ 
-          message: 'Desculpe, a IA não está configurada no servidor (falta GROQ_API_KEY / XAI_API_KEY).' 
-        }),
-        { headers: { 'Content-Type': 'application/json' } }
-      );
+      return new Response(JSON.stringify({ message: 'IA não configurada no servidor.' }), { headers: { 'Content-Type': 'application/json' } });
     }
 
-    const dados = await buscarInformacoesSupabase(env);
+    const ultimaMensagemObj = messages[messages.length - 1];
+    const textoUltimaMensagem = typeof ultimaMensagemObj?.content === 'string' ? ultimaMensagemObj.content : '';
 
-    // Formatação rigorosa dos dados de saúde
-    const textoSaude = Array.isArray(dados?.unidadesSaude) && dados.unidadesSaude.length > 0
-      ? dados.unidadesSaude.map((u: any) => {
-          let servicosStr = 'Não especificado';
-          
-          if (Array.isArray(u.servicos)) {
-            servicosStr = u.servicos.join(', ');
-          } else if (typeof u.servicos === 'string') {
-            try {
-              const parsed = JSON.parse(u.servicos);
-              if (Array.isArray(parsed)) {
-                servicosStr = parsed.join(', ');
-              } else {
-                servicosStr = u.servicos;
-              }
-            } catch {
-              servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ');
-            }
-          }
-
-          return `• Unidade: ${u.nome} | Endereço: ${u.endereco || 'Não informado'} | Horário: ${u.horario || 'Não informado'} | Serviços Oferecidos: ${servicosStr}`;
-        }).join('\n')
-      : 'Nenhuma unidade de saúde cadastrada no momento.';
-
-    const textoEmergencias = Array.isArray(dados?.emergenciasSaude) && dados.emergenciasSaude.length > 0
-      ? dados.emergenciasSaude.map((e: any) => `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`).join('\n')
-      : 'Nenhum contato de emergência cadastrado.';
-
-    const textoCampanhas = Array.isArray(dados?.campanhasSaude) && dados.campanhasSaude.length > 0
-      ? dados.campanhasSaude.map((c: any) => `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`).join('\n')
-      : 'Nenhuma campanha de saúde ativa no momento.';
-
-    const textoDicas = Array.isArray(dados?.dicasSaude) && dados.dicasSaude.length > 0
-      ? dados.dicasSaude.map((d: any) => `• ${d.orientacao}`).join('\n')
-      : 'Nenhuma orientação cadastrada.';
-
-    const textoEmpresas = Array.isArray(dados?.empresas) && dados.empresas.length > 0
-      ? dados.empresas.map((e: any) => `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}`).join('\n')
-      : 'Nenhuma empresa cadastrada.';
-
-    const textoAnuncios = Array.isArray(dados?.anuncios) && dados.anuncios.length > 0
-      ? dados.anuncios.map((a: any) => {
-          const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
-          return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Valor: ${preco} | Descrição: ${a.descricao || 'Sem descrição'}`;
-        }).join('\n')
-      : 'Nenhum anúncio recente.';
+    // Executa a busca inteligente focada na dúvida do usuário
+    const { contexto } = await buscarDadosContextuais(env, textoUltimaMensagem);
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // SYSTEM PROMPT RESTRITIVO ANTIALUCINAÇÃO
     const systemPrompt = `
-Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo da cidade de São Brás do Suaçuí, Minas Gerais.
+Você é o assistente virtual oficial do aplicativo "Meu Suaçuí", exclusivo de São Brás do Suaçuí, MG.
 Hoje é ${dataHoje}.
 
-⚠️ REGRA ABSOLUTA E INEGOCIÁVEL:
-Você DEVE responder às perguntas utilizando **APENAS E EXCLUSIVAMENTE** os dados oficiais fornecidos abaixo extraídos do banco de dados da cidade. 
-- **PROIBIDO ABSOLUTAMENTE** usar conhecimento prévio da internet, inventar nomes de ruas, criar estabelecimentos, farmácias, campanhas de vacinação ou serviços que NÃO constem explicitamente nos textos abaixo.
-- Se a informação solicitada pelo usuário não estiver presente nas listas abaixo, responda estritamente: "Desculpe, essa informação ainda não está cadastrada no banco de dados oficial do aplicativo."
+⚠️ REGRA ABSOLUTA:
+Responda utilizando **APENAS** os dados oficiais fornecidos abaixo. Se a informação exata não estiver presente, diga estritamente: "Desculpe, essa informação não está cadastrada no banco de dados oficial."
 
----
-
-📊 DADOS OFICIAIS DO BANCO DE DADOS:
-
-🏥 SAÚDE - UNIDADES E SERVIÇOS:
-${textoSaude}
-
-🚨 SAÚDE - EMERGÊNCIAS:
-${textoEmergencias}
-
-💉 SAÚDE - CAMPANHAS:
-${textoCampanhas}
-
-🛡️ SAÚDE - ORIENTAÇÕES E PRECAUÇÕES:
-${textoDicas}
-
-🏢 COMÉRCIO E EMPRESAS:
-${textoEmpresas}
-
-🛍️ CLASSIFICADOS E ANÚNCIOS:
-${textoAnuncios}
-
-📅 EVENTOS:
-${dados?.eventos.map((e: any) => `• ${e.titulo} em ${e.local || 'São Brás'} - Início: ${new Date(e.data_hora_inicio).toLocaleString('pt-BR')}`).join('\n') || 'Nenhum evento agendado.'}
-
-📢 COMUNICADOS DA PREFEITURA:
-${dados?.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).join('\n') || 'Nenhum comunicado recente.'}
-
-📰 NOTÍCIAS:
-${dados?.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo || ''}`).join('\n') || 'Nenhuma notícia no momento.'}
-
----
-INSTRUÇÕES DE COMPORTAMENTO:
-1. Seja cortês, claro e use formatação em **negrito** para destacar nomes de unidades, endereços e horários.
-2. Ao responder sobre serviços de saúde, liste estritamente o que consta na seção correspondente do banco, sem adicionar itens externos.
+📊 DADOS RECUPERADOS PARA ESTA PERGUNTA:
+${contexto}
 `;
 
     const isGroq = apiKey.startsWith('gsk_');
@@ -288,69 +202,36 @@ INSTRUÇÕES DE COMPORTAMENTO:
 
     const response = await aiClient.chat.completions.create({
       model: modelName,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        ...messages
-      ],
-      temperature: 0.1, 
-      max_tokens: 600,
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      temperature: 0.1,
+      max_tokens: 500,
     });
 
-    const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui obter uma resposta.';
-    
-    return new Response(
-      JSON.stringify({ message: resposta }),
-      { headers: { 'Content-Type': 'application/json' } }
-    );
+    const resposta = response.choices[0]?.message?.content || 'Desculpe, não consegui obter resposta.';
+    return new Response(JSON.stringify({ message: resposta }), { headers: { 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error('❌ Erro no handleChat:', error);
-    return new Response(
-      JSON.stringify({
-        error: 'Erro ao processar sua pergunta',
-        details: error instanceof Error ? error.message : 'Erro desconhecido',
-      }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    return new Response(JSON.stringify({ error: 'Erro ao processar', details: error instanceof Error ? error.message : '' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
 
 // ============================================
-// SERVIDOR PRINCIPAL
+// SERVIDOR
 // ============================================
 
 export default {
   async fetch(request: Request, env: any, ctx: unknown) {
     const url = new URL(request.url);
-    
-    if (url.pathname === '/api/test') {
-      const apiKey = getApiKey(env);
-      return new Response(
-        JSON.stringify({
-          status: 'OK',
-          message: 'API funcionando!',
-          aiConfigured: !!apiKey,
-          provider: apiKey?.startsWith('gsk_') ? 'Groq' : 'xAI',
-          timestamp: new Date().toISOString(),
-        }),
-        { headers: { 'Content-Type': 'application/json' } }
-      );
-    }
-    
     if (url.pathname === '/api/chat' && request.method === 'POST') {
       return handleChat(request, env);
     }
-    
     try {
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
-    } catch (error) {
-      console.error('❌ Erro no SSR:', error);
-      return new Response(renderErrorPage(), {
-        status: 500,
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+    } catch {
+      return new Response(renderErrorPage(), { status: 500, headers: { "content-type": "text/html; charset=utf-8" } });
     }
   },
 };
