@@ -116,6 +116,7 @@ async function buscarInformacoesSupabase(env: any) {
     const unidadesPromise = supabaseClient.from('saude_unidades').select('*');
     const emergenciasPromise = supabaseClient.from('saude_emergencias').select('*');
     const campanhasPromise = supabaseClient.from('saude_campanhas').select('*');
+    const dicasPromise = supabaseClient.from('saude_dicas').select('*');
 
     const [
       eventosRes,
@@ -125,7 +126,8 @@ async function buscarInformacoesSupabase(env: any) {
       noticiasRes,
       unidadesRes,
       emergenciasRes,
-      campanhasRes
+      campanhasRes,
+      dicasRes
     ] = await Promise.all([
       eventosPromise,
       empresasPromise,
@@ -134,7 +136,8 @@ async function buscarInformacoesSupabase(env: any) {
       noticiasPromise,
       unidadesPromise,
       emergenciasPromise,
-      campanhasPromise
+      campanhasPromise,
+      dicasPromise
     ]);
 
     return {
@@ -145,7 +148,8 @@ async function buscarInformacoesSupabase(env: any) {
       noticias: noticiasRes.data ?? [],
       unidadesSaude: unidadesRes.data ?? [],
       emergenciasSaude: emergenciasRes.data ?? [],
-      campanhasSaude: campanhasRes.data ?? []
+      campanhasSaude: campanhasRes.data ?? [],
+      dicasSaude: dicasRes.data ?? []
     };
   } catch (error) {
     console.error('❌ Erro crítico ao buscar dados do Supabase:', error);
@@ -207,22 +211,28 @@ async function handleChat(request: Request, env: any) {
         }).join('\n')
       : 'Nenhuma unidade de saúde cadastrada no momento.';
 
-    const textoEmergencias = dados?.emergenciasSaude.map((e: any) => 
-      `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`
-    ).join('\n') || 'Nenhum contato de emergência cadastrado.';
+    const textoEmergencias = Array.isArray(dados?.emergenciasSaude) && dados.emergenciasSaude.length > 0
+      ? dados.emergenciasSaude.map((e: any) => `• ${e.nome}: ${e.telefone} (${e.descricao || 'Emergência'})`).join('\n')
+      : 'Nenhum contato de emergência cadastrado.';
 
-    const textoCampanhas = dados?.campanhasSaude.map((c: any) => 
-      `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`
-    ).join('\n') || 'Nenhuma campanha de saúde ativa no momento.';
+    const textoCampanhas = Array.isArray(dados?.campanhasSaude) && dados.campanhasSaude.length > 0
+      ? dados.campanhasSaude.map((c: any) => `• ${c.titulo} | Período: ${c.periodo || 'Não informado'} | Público: ${c.publico_alvo || 'Geral'}`).join('\n')
+      : 'Nenhuma campanha de saúde ativa no momento.';
 
-    const textoEmpresas = dados?.empresas.map((e: any) => {
-      return `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}`;
-    }).join('\n') || 'Nenhuma empresa cadastrada.';
+    const textoDicas = Array.isArray(dados?.dicasSaude) && dados.dicasSaude.length > 0
+      ? dados.dicasSaude.map((d: any) => `• ${d.orientacao}`).join('\n')
+      : 'Nenhuma orientação cadastrada.';
 
-    const textoAnuncios = dados?.anuncios.map((a: any) => {
-      const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
-      return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Valor: ${preco} | Descrição: ${a.descricao || 'Sem descrição'}`;
-    }).join('\n') || 'Nenhum anúncio recente.';
+    const textoEmpresas = Array.isArray(dados?.empresas) && dados.empresas.length > 0
+      ? dados.empresas.map((e: any) => `• ${e.nome} (${e.categoria}) | Endereço: ${e.endereco || 'Não informado'} | Horário: ${e.horario_funcionamento || 'Não informado'} | Tel: ${e.contato || 'N/A'}`).join('\n')
+      : 'Nenhuma empresa cadastrada.';
+
+    const textoAnuncios = Array.isArray(dados?.anuncios) && dados.anuncios.length > 0
+      ? dados.anuncios.map((a: any) => {
+          const preco = a.preco ? `R$ ${a.preco}` : 'Preço a combinar';
+          return `• [CLASSIFICADO] ${a.titulo} (${a.categoria}) | Valor: ${preco} | Descrição: ${a.descricao || 'Sem descrição'}`;
+        }).join('\n')
+      : 'Nenhum anúncio recente.';
 
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
@@ -249,6 +259,9 @@ ${textoEmergencias}
 💉 SAÚDE - CAMPANHAS:
 ${textoCampanhas}
 
+🛡️ SAÚDE - ORIENTAÇÕES E PRECAUÇÕES:
+${textoDicas}
+
 🏢 COMÉRCIO E EMPRESAS:
 ${textoEmpresas}
 
@@ -267,7 +280,7 @@ ${dados?.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo || ''}`).join('\n
 ---
 INSTRUÇÕES DE COMPORTAMENTO:
 1. Seja cortês, claro e use formatação em **negrito** para destacar nomes de unidades, endereços e horários.
-2. Ao responder sobre serviços de saúde, liste estritamente o que consta na seção "SAÚDE - UNIDADES E SERVIÇOS" correspondente à unidade consultada, sem adicionar itens externos.
+2. Ao responder sobre serviços de saúde, liste estritamente o que consta na seção correspondente do banco, sem adicionar itens externos.
 `;
 
     const isGroq = apiKey.startsWith('gsk_');
@@ -279,7 +292,7 @@ INSTRUÇÕES DE COMPORTAMENTO:
         { role: 'system', content: systemPrompt },
         ...messages
       ],
-      temperature: 0.1, // Temperatura reduzida para focar em precisão absoluta e eliminar criatividade/alucinação
+      temperature: 0.1, 
       max_tokens: 600,
     });
 
