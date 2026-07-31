@@ -105,6 +105,10 @@ async function searchSupabase() {
 // HANDLER DA ROTA
 // ============================================
 
+// ============================================
+// HANDLER DA ROTA
+// ============================================
+
 export async function POST(request: Request): Promise<Response> {
   try {
     const body = await request.json() as RequestBody
@@ -123,15 +127,31 @@ export async function POST(request: Request): Promise<Response> {
     // Busca dados no Supabase
     const dadosContexto = await searchSupabase()
 
-    // Formatação segura dos dados de saúde
+    // LOG DE INSPEÇÃO PARA VOCÊ VER NO CONSOLE DA VERCEL/TERMINAL
+    console.log('🏥 Unidades brutas do Supabase:', JSON.stringify(dadosContexto.unidadesSaude))
+
+    // Formatação blindada dos dados de saúde
     const textoSaude = dadosContexto.unidadesSaude.map((u: any) => {
       let servicosStr = 'Atendimento Geral'
-      if (Array.isArray(u.servicos)) {
-        servicosStr = u.servicos.join(', ')
-      } else if (typeof u.servicos === 'string') {
-        servicosStr = u.servicos.replace(/[{}]/g, '').replace(/["']/g, '').split(',').join(', ')
+      
+      try {
+        if (Array.isArray(u.servicos)) {
+          servicosStr = u.servicos.join(', ')
+        } else if (typeof u.servicos === 'string') {
+          // Remove colchetes de array do Postgres e aspas se vierem no formato bruto
+          servicosStr = u.servicos
+            .replace(/^\[|\]$/g, '')
+            .replace(/[{}]/g, '')
+            .replace(/["']/g, '')
+            .split(',')
+            .map((s: string) => s.trim())
+            .join(', ')
+        }
+      } catch (e) {
+        servicosStr = 'Atendimento Geral'
       }
-      return `• Unidade: ${u.nome} | Endereço: ${u.endereco} | Horário: ${u.horario} | Serviços: ${servicosStr}`
+
+      return `• Unidade: ${u.nome || 'Não informado'} | Endereço: ${u.endereco || 'Não informado'} | Horário: ${u.horario || 'Não informado'} | Serviços: ${servicosStr}`
     }).join('\n') || 'Nenhuma unidade cadastrada'
 
     const textoEmergencias = dadosContexto.emergenciasSaude.map((e: any) => 
@@ -183,7 +203,7 @@ NOTÍCIAS:
 ${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
 INSTRUÇÕES CRÍTICAS:
-1. Se o usuário perguntar sobre o "Hospital Municipal", você DEVE responder que ele fica na Rua Dr. Lima, 300 — Centro, funcionando 24 horas, conforme os dados de saúde acima.
+1. Se o usuário perguntar sobre o "Hospital Municipal" ou qualquer unidade de saúde cadastrada acima, você DEVE responder com base exata nos dados fornecidos na seção "UNIDADES DE SAÚDE".
 2. Nunca diga que não encontrou informações sobre saúde se o dado estiver listado nas "UNIDADES DE SAÚDE" acima.
 3. Seja objetivo, educado e use **negrito** nos endereços, nomes de unidades e horários.
 `
@@ -222,7 +242,6 @@ INSTRUÇÕES CRÍTICAS:
     )
   }
 }
-
 export async function GET(): Promise<Response> {
   return new Response(
     JSON.stringify({
