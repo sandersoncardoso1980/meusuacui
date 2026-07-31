@@ -19,7 +19,6 @@ interface RequestBody {
 // CONFIGURAÇÕES
 // ============================================
 
-// Inicializa o cliente da xAI (Grok) usando o SDK compatível com OpenAI
 const apiKey = process.env.XAI_API_KEY || process.env.GROQ_API_KEY
 const aiClient = apiKey
   ? new OpenAI({
@@ -28,7 +27,6 @@ const aiClient = apiKey
     })
   : null
 
-// Inicializa Supabase
 const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY
   ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY)
   : null
@@ -104,7 +102,7 @@ async function searchSupabase() {
 }
 
 // ============================================
-// HANDLER DA ROTA (padrão do TanStack Start)
+// HANDLER DA ROTA
 // ============================================
 
 export async function POST(request: Request): Promise<Response> {
@@ -144,7 +142,6 @@ export async function POST(request: Request): Promise<Response> {
       `• ${c.titulo} | Período: ${c.periodo}`
     ).join('\n') || 'Nenhuma campanha ativa'
 
-    // Se não tiver o cliente de IA configurado
     if (!aiClient) {
       return new Response(
         JSON.stringify({ 
@@ -154,43 +151,20 @@ export async function POST(request: Request): Promise<Response> {
       )
     }
 
-    // Prepara o System Prompt com o contexto da cidade
     const dataHoje = new Date().toLocaleDateString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
 
     const systemPrompt = `
-const systemPrompt = `
 VOCÊ É O ASSISTENTE OFICIAL DE SÃO BRÁS DO SUAÇUÍ. SUA MAIOR PRIORIDADE É RESPONDER SOBRE SAÚDE, HOSPITAIS E UNIDADES PÚBLICAS.
+Hoje é ${dataHoje}.
 
-DADOSOFICIAIS DE SAÚDE (USE ESTAS INFORMAÇÕES OBRIGATORIAMENTE):
+DADOS OFICIAIS DE SAÚDE (USE ESTAS INFORMAÇÕES OBRIGATORIAMENTE):
 🏥 UNIDADES DE SAÚDE:
 ${textoSaude}
 
-🚨 EMERGÊNCIas:
+🚨 EMERGÊNCIAS:
 ${textoEmergencias}
 
 💉 CAMPANHAS:
-${textoCampanhas}
-
-OUTRAS INFORMAÇÕES DA CIDADE:
-- Eventos: ${dadosContexto.eventos.length} cadastrados
-- Empresas: ${dadosContexto.empresas.length} cadastradas
-
-INSTRUÇÕES CRÍTICAS:
-1. Se o usuário perguntar sobre o "Hospital Municipal", você DEVE responder que ele fica na Rua Dr. Lima, 300 — Centro, funcionando 24 horas, conforme os dados de saúde acima.
-2. Nunca diga que não encontrou informações sobre saúde se o dado estiver listado nas "UNIDADES DE SAÚDE" acima.
-3. Seja objetivo, educado e use **negrito** nos endereços e horários.
-`
-Hoje é ${dataHoje}.
-
-Responda às dúvidas dos cidadãos e visitantes baseando-se RIGOROSAMENTE nos dados oficiais do banco de dados abaixo:
-
-🏥 SAÚDE - UNIDADES E POSTOS:
-${textoSaude}
-
-🚨 SAÚDE - EMERGÊNCIAS E TELEFONES ÚTEIS:
-${textoEmergencias}
-
-💉 SAÚDE - CAMPANHAS:
 ${textoCampanhas}
 
 EVENTOS:
@@ -208,15 +182,14 @@ ${dadosContexto.comunicados.map((c: any) => `• ${c.titulo}: ${c.conteudo}`).jo
 NOTÍCIAS:
 ${dadosContexto.noticias.map((n: any) => `• ${n.titulo}: ${n.resumo}`).join('\n') || 'Nenhuma notícia no momento'}
 
-INSTRUÇÕES DE COMPORTAMENTO:
-1. Responda de forma cortês, objetiva e útil.
-2. Use **negrito** para destacar informações importantes (como endereços, horários e telefones).
-3. Se a informação solicitada não estiver na base cadastrada acima, informe educadamente que o dado ainda não foi registrado no aplicativo.
+INSTRUÇÕES CRÍTICAS:
+1. Se o usuário perguntar sobre o "Hospital Municipal", você DEVE responder que ele fica na Rua Dr. Lima, 300 — Centro, funcionando 24 horas, conforme os dados de saúde acima.
+2. Nunca diga que não encontrou informações sobre saúde se o dado estiver listado nas "UNIDADES DE SAÚDE" acima.
+3. Seja objetivo, educado e use **negrito** nos endereços, nomes de unidades e horários.
 `
 
     console.log('🤖 Gerando resposta com o Grok (xAI)...');
 
-    // Chama a API do Grok
     const completion = await aiClient.chat.completions.create({
       model: 'grok-2-latest',
       messages: [
@@ -250,7 +223,6 @@ INSTRUÇÕES DE COMPORTAMENTO:
   }
 }
 
-// GET para teste
 export async function GET(): Promise<Response> {
   return new Response(
     JSON.stringify({
